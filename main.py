@@ -32,9 +32,7 @@ from core.control import PCControl
 from core.agent import Agent
 from core.tts import TTS
 from core.timers import Timers
-from utils import paths
-
-APP_DIR = paths.BASE_DIR
+from utils import paths, secretstore
 
 
 def load_config():
@@ -52,6 +50,15 @@ def load_config():
             pass
     cfg.read(paths.CONFIG_PATH, encoding="utf-8")
     _merge_missing_defaults(cfg)
+    # Keys on disk are DPAPI-encrypted; decrypt in memory, and migrate any
+    # legacy plaintext keys once so they get encrypted immediately.
+    migrate = secretstore.has_plaintext_keys(cfg)
+    secretstore.decrypt_config(cfg)
+    if migrate:
+        try:
+            secretstore.save_config(cfg, paths.CONFIG_PATH)
+        except Exception:
+            pass
     return cfg
 
 
@@ -375,8 +382,7 @@ class MainWindow(QMainWindow):
     def _change_mic(self):
         dev = self.cmb_mic.currentData()
         self.cfg["Main"]["mic_device"] = str(dev)
-        with open(__import__("os").path.join(APP_DIR, "config.ini"), "w", encoding="utf-8") as f:
-            self.cfg.write(f)
+        secretstore.save_config(self.cfg, paths.CONFIG_PATH)
         self.log(f"Microphone device set to {self.cmb_mic.currentText()}")
         self._restart_listening()
 
@@ -405,8 +411,7 @@ class MainWindow(QMainWindow):
         try:
             self.hotkey.rebind(hk)
             self.cfg["Main"]["hotkey"] = hk
-            with open(__import__("os").path.join(APP_DIR, "config.ini"), "w", encoding="utf-8") as f:
-                self.cfg.write(f)
+            secretstore.save_config(self.cfg, paths.CONFIG_PATH)
             self.lbl_hotkey.setText(hk)
             self.log(f"Hotkey changed to {hk}")
         except Exception as e:
@@ -414,15 +419,13 @@ class MainWindow(QMainWindow):
 
     def _save_active(self, state):
         self.cfg["Main"]["use_active_window"] = "true" if state else "false"
-        with open(__import__("os").path.join(APP_DIR, "config.ini"), "w", encoding="utf-8") as f:
-            self.cfg.write(f)
+        secretstore.save_config(self.cfg, paths.CONFIG_PATH)
         self.log(f"Active-window mode: {'on' if state else 'off'}")
 
     def _save_tts(self, state):
         self.cfg["Main"]["tts"] = "true" if state else "false"
         self.tts.set_enabled(bool(state))
-        with open(__import__("os").path.join(APP_DIR, "config.ini"), "w", encoding="utf-8") as f:
-            self.cfg.write(f)
+        secretstore.save_config(self.cfg, paths.CONFIG_PATH)
         self.log(f"Voice replies: {'on' if state else 'off'}")
 
     def _save_perm(self, key):
@@ -474,8 +477,7 @@ class MainWindow(QMainWindow):
         self.log(f"Permission granted: {'full control' if allow_full else 'safe subset only'}")
 
     def _save_config(self):
-        with open(__import__("os").path.join(APP_DIR, "config.ini"), "w", encoding="utf-8") as f:
-            self.cfg.write(f)
+        secretstore.save_config(self.cfg, paths.CONFIG_PATH)
 
     def _change_provider(self):
         old = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()

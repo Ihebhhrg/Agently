@@ -10,7 +10,7 @@ datas = [
 binaries = []
 hiddenimports = [
     "win32com.client", "pythoncom", "pywintypes", "win32api",
-    "win32gui", "win32process", "win32con",
+    "win32gui", "win32process", "win32con", "win32crypt",
     "pyautogui", "mss", "psutil", "requests",
 ]
 
