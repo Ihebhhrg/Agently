@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Build / packaging output
+build/
+dist/
+*.zip
+
+# Runtime output & logs
+logs/
+*.log
+run.err.txt
+run.out.txt
+backup/
+
+# Local secrets — NEVER commit
+config.ini
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
