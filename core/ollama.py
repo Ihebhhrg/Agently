@@ -48,7 +48,9 @@ class OllamaClient:
         try:
             if not self.use_cloud and self.service is not None:
                 if not self.service.ensure_running():
-                    return "Error: local Ollama server is not available."
+                    reason = (getattr(self.service, "last_error", "") or
+                              "the local Ollama server is not available")
+                    return f"Error: {reason}"
 
             messages = []
             if system:

@@ -82,6 +82,7 @@ def _merge_missing_defaults(cfg):
 
 class MainWindow(QMainWindow):
     ollama_event = Signal()
+    local_models = Signal(object)
 
     def __init__(self):
         super().__init__()
@@ -125,6 +126,8 @@ class MainWindow(QMainWindow):
 
         # start the local server only if we boot straight into Local Ollama
         self.ollama_event.connect(self._refresh_status)
+        self.ollama_event.connect(self._on_ollama_event)
+        self.local_models.connect(self._on_local_models)
         if (self.cfg["Main"].get("provider", "gemini") or "").strip().lower() == "local":
             self._start_ollama_async()
 
@@ -487,6 +490,10 @@ class MainWindow(QMainWindow):
         self._rebuild_brain()
 
         if new == "local":
+            exe = self.ollama_service.exe_path()
+            self.log("Local AI: Ollama found at " + exe if exe
+                     else "Local AI: Ollama not found — install from https://ollama.com/download")
+            self._refresh_local_models()
             self._start_ollama_async()
         else:
             self.ollama_service.stop()
@@ -542,7 +549,11 @@ class MainWindow(QMainWindow):
             self.txt_key.setText("")
             self.txt_key.setEnabled(False)
             self.txt_key.setPlaceholderText("not needed for local models")
-            self.b_getkey.setEnabled(False)
+            if prov == "local":
+                self.b_getkey.setText("Install Ollama")
+                self.b_getkey.setEnabled(bool(preset.get("key_hint")))
+            else:
+                self.b_getkey.setEnabled(False)
         self.txt_key.blockSignals(False)
 
     def _open_key_page(self):
@@ -557,6 +568,8 @@ class MainWindow(QMainWindow):
         self._apply_preset(prov)
         self._save_config()
         self._rebuild_brain()
+        if prov == "local":
+            self._refresh_local_models()
         self.log("Brain settings saved.")
 
     def _rebuild_brain(self):
@@ -574,6 +587,7 @@ class MainWindow(QMainWindow):
     def _start_ollama_async(self):
         if self.ollama_service.is_running():
             self._refresh_status()
+            self._refresh_local_models()
             return
         import threading
         threading.Thread(target=self._start_ollama_worker, daemon=True).start()
@@ -581,8 +595,47 @@ class MainWindow(QMainWindow):
     def _start_ollama_worker(self):
         self.log("Starting Ollama on demand…")
         ok = self.ollama_service.start()
-        self.log("Ollama is running." if ok else "Ollama failed to start.")
+        if ok:
+            self.log("Ollama is running.")
+        else:
+            self.log("Ollama failed to start: " +
+                     (self.ollama_service.last_error or "unknown reason"))
         self.ollama_event.emit()
+
+    def _on_ollama_event(self):
+        """After a start attempt, fill the model list once the server is up."""
+        if (self.cmb_provider.currentData() == "local"
+                and self.ollama_service.is_running()):
+            self._refresh_local_models()
+
+    def _refresh_local_models(self):
+        """Ask Ollama (in the background) which models are installed."""
+        import threading
+        threading.Thread(
+            target=lambda: self.local_models.emit(self.ollama_service.list_models()),
+            daemon=True,
+        ).start()
+
+    def _on_local_models(self, names):
+        """Merge installed models into the Model dropdown (saved value first)."""
+        if self.cmb_provider.currentData() != "local":
+            return
+        preset = providers.get("local")
+        saved = self.cmb_cloud_model.currentText().strip()
+        models = []
+        for n in (names or []):
+            if n and n not in models:
+                models.append(n)
+        for n in preset["models"]:
+            if n not in models:
+                models.append(n)
+        if saved and saved not in models:
+            models.insert(0, saved)
+        self.cmb_cloud_model.blockSignals(True)
+        self.cmb_cloud_model.clear()
+        self.cmb_cloud_model.addItems(models)
+        self.cmb_cloud_model.setCurrentText(saved or (models[0] if models else ""))
+        self.cmb_cloud_model.blockSignals(False)
 
     def _show_bubble(self):
         if getattr(self.overlay, "collapsed", False):

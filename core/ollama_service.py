@@ -11,6 +11,7 @@ Rules:
 import os
 import re
 import shutil
+import json
 import subprocess
 import threading
 import time
@@ -29,6 +30,8 @@ class OllamaService:
         self._proc = None
         self._lock = threading.Lock()
         self._timer = None
+        # Human-readable reason for the last failure, shown to the user.
+        self.last_error = ""
 
     # ---------- config (read live so UI edits take effect) ----------
     @property
@@ -84,6 +87,29 @@ class OllamaService:
                 return path
         return ""
 
+    def exe_path(self):
+        """Public: where we would launch ollama from ('' if not found)."""
+        return self._find_exe()
+
+    def list_models(self, timeout=2):
+        """Names of the models installed in the local Ollama store.
+
+        Returns [] (and records ``last_error``) when the server is down or the
+        request fails, so callers can fall back to a static list.
+        """
+        try:
+            with urllib.request.urlopen(self._host + "/api/tags", timeout=timeout) as r:
+                data = json.loads(r.read().decode("utf-8", "ignore"))
+        except Exception as e:
+            self.last_error = str(e) or "could not reach the local Ollama server"
+            return []
+        names = []
+        for m in (data.get("models") or []):
+            name = (m.get("name") or "").strip()
+            if name:
+                names.append(name)
+        return names
+
     def _launch(self):
         """Spawn `ollama serve`. Prefer the real exe (with env) over the vbs."""
         env = dict(os.environ)
@@ -108,6 +134,11 @@ class OllamaService:
             self.owned = True
             return True
         dlog("Ollama: no launcher found (ollama_exe / ollama_vbs missing)")
+        self.last_error = (
+            "Ollama was not found on this PC. Install it from "
+            "https://ollama.com/download (or set 'ollama_exe' in config.ini "
+            "if you installed it to a custom folder)."
+        )
         return False
 
     # ---------- probing ----------
@@ -128,22 +159,29 @@ class OllamaService:
         """Start the server if needed. Returns True when it is up."""
         with self._lock:
             if self.is_running():
+                self.last_error = ""
                 return True
             try:
                 if not self._launch():
                     return False
             except Exception as e:
                 dlog(f"Ollama start failed: {e}")
+                self.last_error = f"Ollama could not be started: {e}"
                 return False
 
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self.is_running():
                 dlog("Ollama: server is up")
+                self.last_error = ""
                 self.touch()
                 return True
             time.sleep(0.5)
         dlog("Ollama: timed out waiting for server")
+        self.last_error = (
+            "Ollama started but did not become ready in time. Try running "
+            "'ollama serve' once manually, then switch to Local again."
+        )
         return False
 
     def ensure_running(self):

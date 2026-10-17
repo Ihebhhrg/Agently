@@ -6,7 +6,7 @@ A free Windows voice agent — talk to your PC, it shows what it heard and answe
 - Windows 10 or 11 (64-bit)
 - A microphone
 - Internet (for the AI "brain" and, on the Lite build, a one-time voice-model download)
-- A **free** Google Gemini API key (see below)
+- A **free** Google Gemini API key (see below) — or run a **local model** with no key and no internet at all (see *Offline / local AI with Ollama*).
 
 ## Downloads — pick one
 
@@ -80,4 +80,29 @@ Verify on Windows: `certutil -hashfile Agently-Setup-Lite.exe SHA256`
 In **Brain → Provider** you can choose:
 - **Gemini** (default, free tier) — paste a Gemini key.
 - **OpenRouter** — paste an OpenRouter key; a working free model is pre-set.
-- **Local (Ollama)** — if you have Ollama installed, the app starts/stops it on demand.
+- **Local (Ollama)** — run a model **entirely offline** on your own PC, with no API key and no data leaving the machine. See the section below.
+
+## Offline / local AI with Ollama
+Agently can run its "brain" locally through [Ollama](https://ollama.com), so it works with **no internet, no API key, and nothing sent to the cloud**. The app starts Ollama when needed and stops it again when idle — and it never shuts down an Ollama server you started yourself.
+
+**1. Install Ollama**
+Download and install it from https://ollama.com/download. The standard install location is detected automatically; the **Install Ollama** button in the Brain section opens this page.
+
+**2. Download a vision model** (one-time, needs internet)
+Open PowerShell and pull the model:
+```
+ollama pull qwen2.5vl:3b
+```
+`qwen2.5vl:3b` is small and runs well on ~6 GB GPUs and most CPUs. With more VRAM you can go bigger, e.g. `ollama pull qwen2.5vl:7b` or `ollama pull llava:7b`.
+
+**3. Point Agently at it**
+In the main window open **Brain → Provider → Local Ollama** and click **Save**. Agently starts Ollama if it isn't running, and the **Model** dropdown lists the models you have installed — pick one (e.g. `qwen2.5vl:3b`).
+
+That's it. Hold **Alt+Shift+V** and talk — everything runs on your PC.
+
+**Troubleshooting**
+- **"Ollama not found"** — the app auto-detects the standard install. If you installed it elsewhere, set `ollama_exe = <full path to ollama.exe>` in `config.ini` and restart.
+- **"model not found"** — pull it first (`ollama pull qwen2.5vl:3b`); the name in the Model box must match exactly.
+- **First reply is slow** — the model loads into memory on the first request; later replies are faster.
+- **Status line** shows `Local Ollama — running ✔` when it's up, or `stopped (starts on use)`.
+

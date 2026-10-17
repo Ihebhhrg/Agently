@@ -44,7 +44,7 @@ PROVIDERS = {
         "host": "http://localhost:11434/v1/chat/completions",
         "needs_key": False,
         "key_label": "",
-        "key_hint": "",
+        "key_hint": "https://ollama.com/download",
         "models": [
             "qwen2.5vl:3b",
         ],
