@@ -1,3 +1,5 @@
+import threading
+
 import mss
 import mss.tools
 import win32gui
@@ -10,10 +12,12 @@ class ScreenCapture:
     def __init__(self, cfg):
         self.cfg = cfg
         self._sct = None
+        # mss handles are not thread-safe, so serialise every grab and let
+        # long-lived streams pass their own dedicated handle.
+        self._grab_lock = threading.Lock()
 
     # ---------- fast path for live streaming ----------
     def _stream_handle(self):
-        # Reuse one capture handle; creating it per frame is very expensive.
         if self._sct is None:
             try:
                 self._sct = mss.mss()
@@ -21,14 +25,23 @@ class ScreenCapture:
                 self._sct = False
         return self._sct or None
 
-    def grab_image(self, max_width=0):
+    @staticmethod
+    def new_handle():
+        """A dedicated mss handle owned by the calling thread."""
+        try:
+            return mss.mss()
+        except Exception:
+            return None
+
+    def grab_image(self, max_width=0, handle=None):
         """Grab the primary monitor straight into a PIL image (no PNG round-trip)."""
-        sct = self._stream_handle()
+        sct = handle if handle is not None else self._stream_handle()
         if sct is None:
             return None
         try:
-            mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-            shot = sct.grab(mon)
+            with self._grab_lock:
+                mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+                shot = sct.grab(mon)
             # BGRX -> RGB without mss' slower .rgb conversion
             img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
             if max_width and img.width > max_width:

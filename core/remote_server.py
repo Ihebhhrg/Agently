@@ -429,34 +429,43 @@ class RemoteHandler(BaseHTTPRequestHandler):
         stop = threading.Event()
 
         def producer():
-            """Grab + encode continuously; always keep the newest frame."""
+            """Grab + encode continuously; always keep the newest frame.
+
+            Uses a dedicated mss handle owned by this thread so a disconnecting
+            client (or the one-shot screenshot path) can never corrupt it.
+            """
+            handle = b.capture.new_handle()
+            if handle is None:
+                try:
+                    from utils.debuglog import dlog
+                    dlog("Remote: screen capture unavailable for streaming")
+                except Exception:
+                    pass
+                return
             prev_digest = None
-            while not stop.is_set():
-                img = b.capture.grab_image(max_width=width)
-                if img is None:
-                    _time.sleep(0.15)
-                    continue
-                # A static screen doesn't need re-encoding at all.
-                try:
-                    digest = img.tobytes()[:4096]
-                except Exception:
-                    digest = None
-                if digest is not None and digest == prev_digest:
-                    _time.sleep(0.02)
-                    continue
-                prev_digest = digest
-                try:
-                    buf = _io.BytesIO()
-                    img.save(buf, format="JPEG", quality=quality, optimize=False)
-                    data = buf.getvalue()
-                except Exception:
-                    continue
-                if frames.full():
+            try:
+                while not stop.is_set():
+                    img = b.capture.grab_image(max_width=width, handle=handle)
+                    if img is None:
+                        _time.sleep(0.15)
+                        continue
                     try:
-                        frames.get_nowait()   # drop the stale one
-                    except queue.Empty:
-                        pass
-                frames.put(data)
+                        buf = _io.BytesIO()
+                        img.save(buf, format="JPEG", quality=quality, optimize=False)
+                        data = buf.getvalue()
+                    except Exception:
+                        continue
+                    if frames.full():
+                        try:
+                            frames.get_nowait()   # drop the stale one
+                        except queue.Empty:
+                            pass
+                    frames.put(data)
+            finally:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
 
         th = threading.Thread(target=producer, daemon=True)
         th.start()
@@ -487,10 +496,6 @@ class RemoteHandler(BaseHTTPRequestHandler):
             pass
         finally:
             stop.set()
-            try:
-                b.capture.close_stream()
-            except Exception:
-                pass
 
     # ---------- handlers ----------
     def _icon(self):
