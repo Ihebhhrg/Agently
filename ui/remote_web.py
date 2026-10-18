@@ -49,18 +49,42 @@ PAGE_HTML = r"""<!doctype html>
   #yes { background:var(--acc); color:#14100c; }
   #no  { background:#26262c; color:var(--fg); }
 
-  .inrow { display:flex; gap:9px; align-items:flex-end; }
-  input[type=text] { flex:1; padding:12px 14px; border-radius:22px; border:1px solid var(--line);
+.inrow { display:flex; gap:9px; align-items:center; }
+  input[type=text] { flex:1 1 auto; min-width:0; padding:13px 15px; border-radius:22px; border:1px solid var(--line);
     background:var(--card); color:var(--fg); font-size:16px; outline:none; }
   input[type=text]:focus { border-color:var(--acc); }
-  button.icon { width:48px; height:48px; flex:0 0 48px; border-radius:50%; border:none;
-    background:var(--card); color:var(--fg); font-size:20px; display:grid; place-items:center; }
-  button.icon.rec { background:var(--acc); color:#14100c; animation:pulse 1.1s infinite; }
+
+  /* ---- big obvious talk button ---- */
+  #talk { display:flex; gap:11px; align-items:center; justify-content:center;
+    width:100%; margin:0 0 11px; padding:15px; border:none; border-radius:16px;
+    background:var(--acc); color:#14100c; font-size:16px; font-weight:700;
+    box-shadow:0 4px 14px rgba(255,107,0,.32); }
+  #talk:active { transform:translateY(1px); }
+  #talk .ico { font-size:24px; line-height:1; }
+  #talk .sub { font-size:11px; font-weight:600; opacity:.75; display:block; }
+  #talk.rec { background:#FF3B30; color:#fff; animation:recpulse 1s infinite; }
+  @keyframes recpulse {
+    0%,100% { box-shadow:0 0 0 0 rgba(255,59,48,.55); }
+    50%     { box-shadow:0 0 0 12px rgba(255,59,48,0); }
+  }
+
+  button.icon { width:44px; height:44px; flex:0 0 44px; border-radius:50%; border:1px solid var(--line);
+    background:var(--card); color:var(--fg); font-size:18px; display:grid; place-items:center; }
+  button.icon.on { background:var(--acc); color:#14100c; border-color:var(--acc); }
   button.icon:disabled { opacity:.4; }
-  @keyframes pulse { 50% { transform:scale(1.08); } }
 
   #shot { display:none; padding:0 14px 10px; }
   #shot img { width:100%; border-radius:12px; border:1px solid var(--line); display:block; }
+
+  /* ---- live screen view ---- */
+  #live { display:none; padding:0 14px 10px; }
+  #live img { width:100%; border-radius:12px; border:1px solid var(--line);
+    display:block; background:#000; }
+  .livebar { display:flex; align-items:center; gap:8px; margin-bottom:6px;
+    font-size:11px; color:var(--mut); font-weight:600; }
+  .livebar .rd { width:8px; height:8px; border-radius:50%; background:#FF3B30;
+    animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.25; } }
 
   #gate { position:fixed; inset:0; background:var(--bg); display:grid; place-items:center;
           padding:24px; z-index:9; }
@@ -94,8 +118,13 @@ PAGE_HTML = r"""<!doctype html>
   <span class="lbl" id="stat"></span>
 </header>
 
-<div id="log"><div class="sys">Say something or type below.</div></div>
+<div id="log"><div class="sys">Say something, or tap the big Talk button below.</div></div>
 <div id="shot"><img id="shotimg" alt="screen"></div>
+
+<div id="live">
+  <div class="livebar"><span class="rd"></span> LIVE SCREEN <span id="livenote"></span></div>
+  <img id="liveimg" alt="live screen">
+</div>
 
 <div id="bar">
   <div id="ask">
@@ -103,10 +132,12 @@ PAGE_HTML = r"""<!doctype html>
     <div class="d" id="askd"></div>
     <div class="row"><button id="no">Cancel</button><button id="yes">Yes, do it</button></div>
   </div>
+  <button id="talk"><span class="ico">&#127897;</span><span>TALK
+    <span class="sub">tap to start, tap again to stop</span></span></button>
   <div class="inrow">
-    <button class="icon" id="mic">&#9679;</button>
-    <input id="txt" type="text" placeholder="Ask anything..." autocomplete="off">
-    <button class="icon" id="cam">&#128247;</button>
+    <input id="txt" type="text" placeholder="Or type a message..." autocomplete="off">
+    <button class="icon" id="livebtn" title="Watch my screen">&#128250;</button>
+    <button class="icon" id="cam" title="One screenshot">&#128247;</button>
   </div>
 </div>
 
@@ -125,8 +156,11 @@ PAGE_HTML = r"""<!doctype html>
   var logEl = document.getElementById("log"), askEl = document.getElementById("ask");
   var askd = document.getElementById("askd"), statEl = document.getElementById("stat");
   var dotEl = document.getElementById("dot"), shotEl = document.getElementById("shot");
-  var micEl = document.getElementById("mic"), txtEl = document.getElementById("txt");
+  var txtEl = document.getElementById("txt");
   var busy = false, pendingId = null, rec = null, chunks = [];
+  var talkEl = document.getElementById("talk");
+  var liveEl = document.getElementById("live"), liveImg = document.getElementById("liveimg");
+  var liveBtn = document.getElementById("livebtn"), liveOn = false;
 
   if (TOKEN) { document.getElementById("gate").style.display = "none"; boot(); }
   else document.getElementById("tok").focus();
@@ -213,16 +247,20 @@ PAGE_HTML = r"""<!doctype html>
 
   txtEl.addEventListener("keydown", function (e) { if (e.key === "Enter") send(txtEl.value), txtEl.value = ""; });
 
-  // ---- mic ----
-  micEl.onclick = function () {
+  // ---- big TALK button ----
+  talkEl.onclick = function () {
     if (rec) { rec.stop(); return; }
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       rec = new MediaRecorder(stream); chunks = [];
       rec.ondataavailable = function (e) { chunks.push(e.data); };
       rec.onstop = function () {
         stream.getTracks().forEach(function (t) { t.stop(); });
-        micEl.classList.remove("rec"); micEl.textContent = "\u25CF"; rec = null;
+        talkEl.classList.remove("rec");
+        talkEl.querySelector(".ico").textContent = "\uD83C\uDFA4";
+        talkEl.childNodes[1].firstChild.textContent = "TALK ";
+        rec = null;
         var blob = new Blob(chunks, { type: chunks[0] ? chunks[0].type : "audio/webm" });
+        if (!blob.size) { add("sys", "Nothing recorded."); return; }
         var fr = new FileReader();
         fr.onload = function () {
           var b64 = String(fr.result).split(",")[1];
@@ -231,19 +269,40 @@ PAGE_HTML = r"""<!doctype html>
           api("/api/voice", { audio: b64 }).then(function (r) {
             b.remove();
             if (r.type === "error") add("sys", r.reply || "I didn't catch that.");
-            else {
-              add("u", r.transcript || "(voice)");
-              handle(r);
-            }
+            else { add("u", r.transcript || "(voice)"); handle(r); }
           }).catch(function () { b.remove(); add("sys", "Connection lost."); });
         };
         fr.readAsDataURL(blob);
       };
-      rec.start(); micEl.classList.add("rec"); micEl.textContent = "\u25A0";
-    }).catch(function () { add("sys", "Microphone blocked - allow access."); });
+      rec.start();
+      talkEl.classList.add("rec");
+      talkEl.querySelector(".ico").textContent = "\u25A0";
+      talkEl.childNodes[1].firstChild.textContent = "STOP - TAP TO SEND ";
+    }).catch(function () { add("sys", "Microphone blocked - allow mic access for this site."); });
   };
 
-  // ---- screenshot ----
+  // ---- live screen stream ----
+  function stopLive() {
+    liveOn = false;
+    liveImg.removeAttribute("src");
+    liveEl.style.display = "none";
+    liveBtn.classList.remove("on");
+    document.getElementById("livenote").textContent = "";
+  }
+  liveBtn.onclick = function () {
+    if (liveOn) { stopLive(); return; }
+    liveOn = true;
+    liveEl.style.display = "block";
+    liveBtn.classList.add("on");
+    liveImg.src = "/api/stream.mjpg?t=" + encodeURIComponent(TOKEN) + "&_=" + Date.now();
+  };
+  liveImg.onerror = function () {
+    if (!liveOn) return;
+    document.getElementById("livenote").textContent = "(stream stopped - tap to retry)";
+    liveOn = false; liveBtn.classList.remove("on");
+  };
+
+  // ---- one-off screenshot ----
   document.getElementById("cam").onclick = function () {
     var b = add("busy", "Grabbing screen...");
     api("/api/screenshot").then(function (r) { b.remove(); handle(r); })

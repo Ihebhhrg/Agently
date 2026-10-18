@@ -129,6 +129,11 @@ class RemoteHandler(BaseHTTPRequestHandler):
         if not self.token:
             return False
         got = self.headers.get("X-Agently-Token", "") or ""
+        if not got:
+            # <img> tags cannot set headers, so the live stream passes ?t=.
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query).get("t", [""])[0]
+            got = q
         if got and hmac.compare_digest(got, self.token):
             return True
         # Also accept the cookie set by the /j/<token> join link.
@@ -222,6 +227,8 @@ class RemoteHandler(BaseHTTPRequestHandler):
             return self._status()
         if path == "/api/screenshot":
             return self._screenshot()
+        if path == "/api/stream.mjpg":
+            return self._stream()
         return self._json({"error": "not found"}, 404)
 
     def do_POST(self):
@@ -238,6 +245,50 @@ class RemoteHandler(BaseHTTPRequestHandler):
             ok = bool(body.get("approve"))
             return self._json(self.bridge.resolve(body.get("confirm_id", ""), ok))
         return self._json({"error": "not found"}, 404)
+
+    # ---------- live screen stream (MJPEG) ----------
+    def _stream(self):
+        """Push a low-FPS downscaled JPEG of the screen to the phone."""
+        b = self.bridge
+        if not b or not b.capture:
+            return self._json({"type": "reply", "reply": "Screen capture unavailable."}, 404)
+        fps = 4
+        try:
+            fps = max(1, min(8, int(self.cfg["Main"].get("remote_stream_fps", "4"))))
+        except Exception:
+            pass
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+        except Exception:
+            return
+
+        import io as _io
+        import time as _time
+        from PIL import Image
+        deadline = _time.time() + 1800  # cap a single session at 30 minutes
+        try:
+            while _time.time() < deadline:
+                self._touch()
+                try:
+                    shot = b.capture.capture_full()
+                    im = Image.open(shot).convert("RGB")
+                    im.thumbnail((560, 560))
+                    buf = _io.BytesIO()
+                    im.save(buf, format="JPEG", quality=55)
+                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n")
+                    self.wfile.write(buf.getvalue())
+                    self.wfile.write(b"\r\n")
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return  # phone went away
+                except Exception:
+                    pass
+                _time.sleep(1.0 / fps)
+        except Exception:
+            pass
 
     # ---------- handlers ----------
     def _icon(self):
