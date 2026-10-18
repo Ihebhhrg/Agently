@@ -15,7 +15,7 @@ except Exception:  # pywin32 is a hard runtime dependency, so this is just a saf
     _HAVE_DPAPI = False
 
 PREFIX = "dpapi:"
-KEY_FIELDS = ("gemini_key", "openrouter_key", "api_key")
+KEY_FIELDS = ("gemini_key", "openrouter_key", "api_key", "remote_token")
 _DESCRIPTION = "Agently"
 
 
@@ -91,3 +91,9 @@ def save_config(cfg, path):
     """Write *cfg* to *path* with key fields encrypted. Memory is untouched."""
     with open(path, "w", encoding="utf-8") as f:
         _encrypted_copy(cfg).write(f)
+
+
+def new_token():
+    """A fresh URL-safe access token for the remote web app."""
+    import secrets as _secrets
+    return _secrets.token_urlsafe(24)

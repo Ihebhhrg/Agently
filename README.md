@@ -54,7 +54,7 @@ On first launch Agently asks for permission and you choose **Allow full control*
 A few actions (Wi-Fi/Bluetooth adapter, some system settings) need administrator rights. Windows will show a **UAC prompt** only at that moment — the app itself stays non-admin.
 
 ## Notes
-- Your API key is stored only in `config.ini` next to the app, on your own PC.
+- Your API key is stored only in `config.ini` next to the app, on your own PC, **encrypted with Windows DPAPI** (only your Windows account can decrypt it).
 - No admin rights are needed for installation.
 - A command blocklist still refuses obviously destructive commands (`format`, `diskpart`, mass-deletes) even when Run commands is enabled.
 
@@ -105,4 +105,20 @@ That's it. Hold **Alt+Shift+V** and talk — everything runs on your PC.
 - **"model not found"** — pull it first (`ollama pull qwen2.5vl:3b`); the name in the Model box must match exactly.
 - **First reply is slow** — the model loads into memory on the first request; later replies are faster.
 - **Status line** shows `Local Ollama — running ✔` when it's up, or `stopped (starts on use)`.
+
+## Control it from your phone
+Agently can serve a small mobile web app so you can control your PC while you're out. It runs over your **private [Tailscale](https://tailscale.com) network**, so **no ports are opened on your router** and nothing is exposed to the public internet.
+
+**1. Install Tailscale** on your PC and on your phone, and sign both into the same account. (Free tier is fine.)
+
+**2. Turn on remote access.** In the Agently window check **Remote — control from your phone**. It shows a link and an access token; click **Copy link + token**.
+
+**3. Open it on your phone.** Make sure Tailscale is connected on the phone, open the link in the browser, paste the token once — and add the page to your home screen so it behaves like an app.
+
+From there you can talk to it (big red mic button) or type, ask it to show your screen, and check your timers. Anything risky — running commands, shutdown/restart, deleting files, or typing/clicking on your PC — shows a **Yes / Cancel** button on the phone before it happens. The PC is kept awake only while your phone is connected.
+
+**How it stays safe**
+- The server binds to the machine's Tailscale IP (never the public internet) and every request needs the access token (stored encrypted).
+- Risky actions are confirm-gated on the phone, so nothing dangerous runs from a typo or a misheard word.
+- Confirmations expire after 3 minutes, and the Catastrophic-command blocklist still applies.
 

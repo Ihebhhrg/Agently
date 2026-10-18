@@ -94,6 +94,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.cfg = load_config()
+        self.remote = None
+        self.remote_bridge = None
         self.setWindowTitle("Agently — Voice Agent")
         self.resize(560, 680)
 
@@ -140,6 +142,9 @@ class MainWindow(QMainWindow):
 
         self.log("App started. Press Alt+Shift+V to talk, or use the buttons below.")
         QTimer.singleShot(300, self._maybe_ask_consent)
+
+        # remote access (starts only if it was left enabled)
+        QTimer.singleShot(400, self._start_remote)
 
     # ---------- UI ----------
     def _build_ui(self):
@@ -319,6 +324,42 @@ class MainWindow(QMainWindow):
         pgrid.addLayout(confirm_row, len(perm_defs) // 2 + 1, 0, 1, 2)
         root.addWidget(permb)
 
+        # remote (control from your phone over Tailscale)
+        rb = QGroupBox("Remote — control from your phone (Tailscale)")
+        rform = QFormLayout(rb)
+        self.chk_remote = QCheckBox("Enable remote access")
+        self.chk_remote.setChecked(self.cfg["Main"].getboolean("remote_enabled", False))
+        self.chk_remote.stateChanged.connect(self._toggle_remote)
+        rform.addRow(self.chk_remote)
+
+        self.lbl_remote_url = QLabel("—")
+        self.lbl_remote_url.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.lbl_remote_url.setWordWrap(True)
+        rform.addRow("Open on your phone:", self.lbl_remote_url)
+
+        self.lbl_remote_token = QLabel("—")
+        self.lbl_remote_token.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.lbl_remote_token.setWordWrap(True)
+        rform.addRow("Access token:", self.lbl_remote_token)
+
+        rrow = QHBoxLayout()
+        b_newtok = QPushButton("New token")
+        b_newtok.clicked.connect(self._new_remote_token)
+        b_copy = QPushButton("Copy link + token")
+        b_copy.clicked.connect(self._copy_remote_info)
+        rrow.addWidget(b_newtok)
+        rrow.addWidget(b_copy)
+        rrow.addStretch(1)
+        rform.addRow(rrow)
+
+        rnote = QLabel(
+            "Works only over your private Tailscale network (no open ports). "
+            "Risky actions always ask Yes/Cancel on your phone."
+        )
+        rnote.setWordWrap(True)
+        rform.addRow(rnote)
+        root.addWidget(rb)
+
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Ready")
 
@@ -442,6 +483,82 @@ class MainWindow(QMainWindow):
             self.agent.confirm = bool(state)
         self._save_config()
         self.log(f"Confirm dangerous actions: {'on' if state else 'off'}")
+
+    # ---------- remote (phone over Tailscale) ----------
+    def _remote_url(self):
+        ip = (self.remote.ip if (self.remote and self.remote.ip) else "127.0.0.1")
+        port = self.cfg["Main"].get("remote_port", "8765")
+        return f"http://{ip}:{port}"
+
+    def _refresh_remote_labels(self):
+        if not hasattr(self, "chk_remote"):
+            return
+        if self.cfg["Main"].getboolean("remote_enabled", False):
+            self.lbl_remote_url.setText(self._remote_url())
+        else:
+            self.lbl_remote_url.setText("disabled")
+        tok = self.cfg["Main"].get("remote_token", "") or ""
+        self.lbl_remote_token.setText(tok if tok else "(none yet - click New token)")
+
+    def _toggle_remote(self, state):
+        on = bool(state)
+        self.cfg["Main"]["remote_enabled"] = "true" if on else "false"
+        if on and not self.cfg["Main"].get("remote_token", ""):
+            self.cfg["Main"]["remote_token"] = secretstore.new_token()
+        self._save_config()
+        if on:
+            self._start_remote()
+        else:
+            self._stop_remote()
+        self._refresh_remote_labels()
+        self.log("Remote access: " + ("enabled" if on else "disabled"))
+
+    def _new_remote_token(self):
+        self.cfg["Main"]["remote_token"] = secretstore.new_token()
+        self._save_config()
+        if self.remote:
+            self.remote.httpd = None
+            self._start_remote(force=True)
+        self._refresh_remote_labels()
+        self.log("New remote access token generated.")
+
+    def _copy_remote_info(self):
+        info = f"{self._remote_url()}\nToken: {self.cfg['Main'].get('remote_token', '')}"
+        try:
+            import subprocess as sp
+            sp.Popen(["clip"], stdin=sp.PIPE, text=True).communicate(info)
+            self.log("Link + token copied to clipboard.")
+        except Exception:
+            self.log("Copy failed - select and copy the text manually.")
+
+    def _start_remote(self, force=False):
+        if not self.cfg["Main"].getboolean("remote_enabled", False) and not force:
+            return
+        if self.remote and self.remote.httpd and not force:
+            return
+        self._stop_remote()
+        tok = self.cfg["Main"].get("remote_token", "")
+        if not tok:
+            self.cfg["Main"]["remote_token"] = secretstore.new_token()
+            self._save_config()
+            tok = self.cfg["Main"].get("remote_token", "")
+        from core.remote_bridge import RemoteBridge
+        from core.remote_server import RemoteServer
+        bridge = RemoteBridge(self.cfg, log=self.log)
+        bridge.agent = self.agent
+        bridge.control = self.control
+        bridge.stt = self.stt
+        bridge.capture = self.capture
+        bridge.timers = self.timers
+        self.remote_bridge = bridge
+        self.remote = RemoteServer(self.cfg, bridge, log=self.log)
+        self.remote.start()
+        self._refresh_remote_labels()
+
+    def _stop_remote(self):
+        if getattr(self, "remote", None):
+            self.remote.stop()
+            self.remote = None
 
     def _maybe_ask_consent(self):
         """One-time first-run permission dialog. Saves the choice and never asks again."""
