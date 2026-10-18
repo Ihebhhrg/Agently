@@ -538,10 +538,9 @@ class VoiceOverlay(QWidget):
         if not self.agent:
             self._busy = False
             return
+        # The agent decides whether a screenshot is actually needed - plain
+        # questions skip the capture entirely, which is faster and cheaper.
         info = self.capture.get_active_info() if self.capture else {"app": "unknown", "title": "unknown"}
-        use_active = self.cfg["Main"].getboolean("use_active_window", True)
-        if img is None and self.capture:
-            img = self.capture.capture_active() if use_active else self.capture.capture_full()
 
         self._log("🤔 Thinking…")
 

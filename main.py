@@ -304,18 +304,41 @@ class MainWindow(QMainWindow):
         self.cmb_cloud_model.setEditable(True)
         bform.addRow("Model:", self.cmb_cloud_model)
 
+        # Which model answers general questions (routing).
+        self.cmb_chat_model = QComboBox()
+        for label, val in (("Auto (smartest available)", "auto"),
+                           ("Same as commands", "same"),
+                           ("Google Gemini", "gemini"),
+                           ("OpenRouter", "openrouter"),
+                           ("Local Ollama", "local")):
+            self.cmb_chat_model.addItem(label, val)
+        cur_chat = (self.cfg["Main"].get("chat_provider", "auto") or "auto").strip().lower()
+        pos = self.cmb_chat_model.findData(cur_chat)
+        self.cmb_chat_model.setCurrentIndex(pos if pos >= 0 else 0)
+        self.cmb_chat_model.currentIndexChanged.connect(self._change_chat_provider)
+        bform.addRow("Answers questions with:", self.cmb_chat_model)
+
+        self.lbl_chat_now = QLabel("")
+        self.lbl_chat_now.setStyleSheet("color: #9A9A9A;")
+        bform.addRow("", self.lbl_chat_now)
+
         brow = QHBoxLayout()
         b_save = QPushButton("Save brain settings")
         b_save.setObjectName("Primary")
         b_save.clicked.connect(self._save_brain)
         self.b_getkey = QPushButton("Get API key")
         self.b_getkey.clicked.connect(self._open_key_page)
+        b_clear = QPushButton("Forget chat")
+        b_clear.clicked.connect(self._clear_memory)
         brow.addWidget(b_save)
         brow.addWidget(self.b_getkey)
+        brow.addWidget(b_clear)
+        brow.addStretch(1)
         bform.addRow(brow)
         root.addWidget(bb)
 
         self._load_provider_fields(cur_prov, initial=True)
+        self._refresh_chat_label()
 
         # permissions
         permb = QGroupBox("Permissions — what Agently may do")
@@ -467,6 +490,7 @@ class MainWindow(QMainWindow):
             else:
                 state = "stopped (starts on use)"
             self.lbl_ollama.setText(f"{preset['label']} — {state}")
+        self._refresh_chat_label()
         # whisper
         wm = self.cfg['Main'].get('whisper_model')
         if self.stt.model is not None:
@@ -896,6 +920,41 @@ class MainWindow(QMainWindow):
 
     def _save_config(self):
         secretstore.save_config(self.cfg, paths.CONFIG_PATH)
+
+    def _change_chat_provider(self):
+        val = self.cmb_chat_model.currentData()
+        self.cfg["Main"]["chat_provider"] = val
+        self._save_config()
+        try:
+            self.agent.clear_memory()
+            self.agent._chat_client = None
+            self.agent._chat_provider = None
+        except Exception:
+            pass
+        self._refresh_chat_label()
+        self.log(f"Questions will be answered by: {self.cmb_chat_model.currentText()}")
+
+    def _refresh_chat_label(self):
+        if not hasattr(self, "lbl_chat_now"):
+            return
+        try:
+            from core.providers import get as getp
+            p = self.agent.pick_chat_provider()
+            model = (self.cfg["Main"].get("ollama_model" if p == "local" else f"{p}_model", "")
+                     or getp(p)["models"][0])
+            n = self.agent.memory.size()
+            self.lbl_chat_now.setText(
+                f"currently: {getp(p)['label']} — {model}  ·  memory: {n} message(s)")
+        except Exception as e:
+            self.lbl_chat_now.setText("")
+
+    def _clear_memory(self):
+        try:
+            self.agent.clear_memory()
+            self._refresh_chat_label()
+            self.log("Forgot the conversation so far.")
+        except Exception:
+            pass
 
     def _change_provider(self):
         old = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()

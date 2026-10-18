@@ -58,6 +58,13 @@ A few actions (Wi-Fi/Bluetooth adapter, some system settings) need administrator
 - No admin rights are needed for installation.
 - A command blocklist still refuses obviously destructive commands (`format`, `diskpart`, mass-deletes) even when Run commands is enabled.
 
+## Talking to it (chat vs. commands)
+Agently tells your questions and your commands apart automatically:
+- **A question** ("what is quantum tunneling?") skips the screenshot entirely, so replies are faster and cheaper, and it answers on any topic.
+- **A command** ("open notepad", "shut down") still goes through the action engine with a screenshot, so it can see what you're looking at.
+- **"Answers questions with"** in the Brain panel lets you route questions to a different, stronger model than the one handling commands — handy if commands run on the free local model while questions use a big cloud model.
+- It **remembers the last few messages**, so follow-ups like "and what about the other one?" work. Press **Forget chat** to clear it.
+
 ## Why might Windows/antivirus warn? (and what to do)
 Agently is **not** code-signed (certificates cost money), so Windows may show a warning. This is a **false positive** — the app is safe. To proceed:
 

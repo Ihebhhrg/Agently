@@ -10,12 +10,17 @@ class OllamaClient:
 
     The provider is chosen in config (``provider``) and only decides the host,
     model, key and whether the local Ollama server must be started on demand.
+    Pass ``provider_override`` to build a second client aimed at a different
+    provider - that is how chat questions get routed to a stronger model while
+    PC commands stay on the configured one.
     """
 
-    def __init__(self, cfg, service=None):
+    def __init__(self, cfg, service=None, provider_override=None):
         self.cfg = cfg
         self.service = service
-        self.provider = (cfg['Main'].get('provider', 'gemini') or 'gemini').strip().lower()
+        self.provider = (provider_override
+                         or cfg['Main'].get('provider', 'gemini')
+                         or 'gemini').strip().lower()
         preset = get_provider(self.provider)
         self.use_cloud = preset['use_cloud']
 
@@ -44,7 +49,13 @@ class OllamaClient:
         except Exception:
             return None
 
-    def query(self, prompt: str, img_path: str = None, system: str = None, callback=None) -> str:
+    def query(self, prompt: str, img_path: str = None, system: str = None,
+              history=None, max_tokens=None, temperature=None) -> str:
+        """Single-turn query with optional image and prior turns.
+
+        ``history`` is a list of {'role','content'} dicts that get inserted
+        before the current prompt so follow-up questions have context.
+        """
         try:
             if not self.use_cloud and self.service is not None:
                 if not self.service.ensure_running():
@@ -55,6 +66,11 @@ class OllamaClient:
             messages = []
             if system:
                 messages.append({"role": "system", "content": system})
+            for h in (history or [])[-12:]:
+                role = h.get("role", "user")
+                content = h.get("content", "")
+                if role != "system" and content:
+                    messages.append({"role": role, "content": content})
             content = [{"type": "text", "text": prompt}]
             if img_path:
                 b64 = self._encode_image(img_path)
@@ -67,8 +83,8 @@ class OllamaClient:
             payload = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
+                "temperature": self.temperature if temperature is None else temperature,
+                "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
                 "stream": False
             }
             if self.use_cloud and self.reasoning_effort:
