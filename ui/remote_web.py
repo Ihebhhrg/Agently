@@ -79,8 +79,10 @@ PAGE_HTML = r"""<!doctype html>
 
 <div id="gate"><div class="card">
   <h2>Connect to Agently</h2>
-  <p>Paste the access token shown in the Agently app on your PC.</p>
-  <input id="tok" type="text" placeholder="Access token" autocomplete="off">
+  <p id="gatehint">Open this page by <b>scanning the QR code</b> in the
+  &ldquo;Remote&rdquo; section of Agently on your PC &mdash; it signs you in
+  automatically. Paste the token only if the camera can't read the QR.</p>
+  <input id="tok" type="text" placeholder="Access token (fallback)" autocomplete="off">
   <button id="go">Connect</button>
   <div class="err" id="gerr"></div>
 </div></div>
@@ -129,6 +131,13 @@ PAGE_HTML = r"""<!doctype html>
   if (TOKEN) { document.getElementById("gate").style.display = "none"; boot(); }
   else document.getElementById("tok").focus();
 
+  window.addEventListener("error", function (ev) {
+    var g = document.getElementById("gerr");
+    if (g && document.getElementById("gate").style.display !== "none") {
+      g.textContent = "Page error: " + (ev.message || "unknown");
+    }
+  });
+
   document.getElementById("go").onclick = function () {
     var t = document.getElementById("tok").value.trim();
     if (!t) return;
@@ -165,7 +174,17 @@ PAGE_HTML = r"""<!doctype html>
       statEl.textContent = s.timers ? (s.timers + " timer" + (s.timers > 1 ? "s" : "")) : "online";
     }).catch(function (e) {
       dotEl.className = "dot off";
-      statEl.textContent = e.message === "bad token" ? "bad token" : "offline";
+      if (e.message === "bad token") {
+        // Stale/wrong saved token - forget it and ask again.
+        try { localStorage.removeItem("agently_token"); } catch (x) {}
+        TOKEN = "";
+        document.getElementById("gate").style.display = "grid";
+        document.getElementById("gerr").textContent =
+          "That token was rejected. Scan the QR again, or paste a new token.";
+        statEl.textContent = "sign in again";
+        return;
+      }
+      statEl.textContent = "offline";
     });
   }
 
@@ -194,7 +213,7 @@ PAGE_HTML = r"""<!doctype html>
 
   txtEl.addEventListener("keydown", function (e) { if (e.key === "Enter") send(txtEl.value), txtEl.value = ""; });
 
-  # ---- mic ----
+  // ---- mic ----
   micEl.onclick = function () {
     if (rec) { rec.stop(); return; }
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {

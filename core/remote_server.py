@@ -187,20 +187,21 @@ class RemoteHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
 
-        # Join link: /j/<token>  -> set the cookie and go to the app.
-        # (A path segment survives camera apps that strip ?query strings.)
+        # Join link: /j/<token> -> serve the app already signed in.
+        # The token is injected straight into the page AND stored in a cookie,
+        # so sign-in works even if the browser refuses to keep cookies.
         if path.startswith("/j/") and len(path) > 3:
             import hmac
             tok = path[3:]
             if self.token and hmac.compare_digest(tok, self.token):
                 self._touch()
-                self.send_response(302)
-                self.send_header("Location", "/")
-                self.send_header("Set-Cookie",
-                                 f"agently_tok={tok}; Path=/; Max-Age=31536000; SameSite=Lax")
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-                return
+                html = PAGE_HTML.replace(
+                    "<script>",
+                    f'<script>window.__AGENTLY_TOKEN__ = "{tok}";</script><script>', 1)
+                return self._send_html(html, extra_headers=[
+                    ("Set-Cookie",
+                     f"agently_tok={tok}; Path=/; Max-Age=31536000; SameSite=Lax"),
+                ])
             return self._json({"error": "bad token"}, 401)
 
         if path in ("/", "/index.html"):
