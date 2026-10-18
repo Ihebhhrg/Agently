@@ -75,10 +75,12 @@ PAGE_HTML = r"""<!doctype html>
     50%     { box-shadow:0 0 0 9px rgba(255,59,48,0); }
   }
 
-  #shot { display:none; padding:0 14px 10px; }
-  #shot img { width:100%; border-radius:12px; border:1px solid var(--line); display:block; }
+  /* screenshots ride along in the chat so they scroll with the messages */
+  .shotwrap { align-self:flex-start; max-width:88%; padding:6px; border-radius:14px;
+    background:var(--card); border:1px solid var(--line); border-bottom-left-radius:5px; }
+  .shotwrap img { display:block; width:100%; border-radius:9px; }
+  .shotwrap .cap { font-size:11px; color:var(--mut); padding:5px 2px 1px; }
 
-  /* ---- live screen view ---- */
   #live { display:none; padding:0 14px 10px; }
   #live img { width:100%; aspect-ratio:16/9; object-fit:contain; border-radius:12px;
     border:1px solid var(--line); display:block; background:#000; min-height:120px; }
@@ -139,7 +141,6 @@ PAGE_HTML = r"""<!doctype html>
 </header>
 
 <div id="log"><div class="sys">Tap the mic to talk, or type a message.</div></div>
-<div id="shot"><img id="shotimg" alt="screen"></div>
 
 <div id="live">
   <div class="livebar">
@@ -214,7 +215,7 @@ PAGE_HTML = r"""<!doctype html>
   })();
   var logEl = document.getElementById("log"), askEl = document.getElementById("ask");
   var askd = document.getElementById("askd"), statEl = document.getElementById("stat");
-  var dotEl = document.getElementById("dot"), shotEl = document.getElementById("shot");
+  var dotEl = document.getElementById("dot");
   var txtEl = document.getElementById("txt");
   var busy = false, pendingId = null, rec = null, chunks = [];
   var talkEl = document.getElementById("talk");
@@ -292,15 +293,32 @@ PAGE_HTML = r"""<!doctype html>
     }).then(function () { busy = false; });
   }
 
+  function addShot(dataUrl, caption) {
+    // only ever one screenshot in the chat, and it scrolls like a message
+    var old = logEl.querySelector(".shotwrap");
+    if (old) old.remove();
+    var wrap = document.createElement("div");
+    wrap.className = "shotwrap";
+    var img = document.createElement("img");
+    img.src = dataUrl;
+    img.alt = "screen capture";
+    wrap.appendChild(img);
+    var cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = (caption || "Screenshot") + " — tap to remove";
+    wrap.appendChild(cap);
+    wrap.addEventListener("click", function () { wrap.remove(); });
+    logEl.appendChild(wrap);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
   function handle(r) {
     if (r.type === "confirm") {
       pendingId = r.confirm_id; askd.textContent = r.desc; askEl.style.display = "block";
     } else if (r.type === "reply") {
       add("b", r.reply || "Done.");
     } else if (r.type === "shot") {
-      document.getElementById("shotimg").src = "data:image/jpeg;base64," + r.image;
-      shotEl.style.display = "block";
-      add("b", r.text || "");
+      addShot("data:image/jpeg;base64," + r.image, r.text);
     }
   }
 
