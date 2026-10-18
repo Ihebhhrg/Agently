@@ -106,6 +106,38 @@ def tailscale_logged_in():
         return False
 
 
+def tailscale_up():
+    """Start Tailscale login. Returns (ok, message, login_url)."""
+    exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                       "Tailscale", "tailscale.exe")
+    if not os.path.exists(exe):
+        return False, "Tailscale is not installed.", ""
+    try:
+        proc = subprocess.Popen(
+            [exe, "up"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except Exception as e:
+        return False, str(e), ""
+    url = ""
+    import time as _time
+    deadline = _time.time() + 12
+    lines = []
+    while _time.time() < deadline and proc.poll() is None:
+        try:
+            line = proc.stdout.readline()
+        except Exception:
+            break
+        if not line:
+            break
+        lines.append(line)
+        import re as _re
+        m = _re.search(r"https://login\.tailscale\.com/\S+", line)
+        if m:
+            url = m.group(0)
+            break
+    return True, ("\n".join(lines)[-400:] or "waiting for sign-in..."), url
+
+
 def enable_tailscale_serve(port):
     """Expose the local server over HTTPS with a real Tailscale certificate."""
     exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),

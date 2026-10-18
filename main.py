@@ -587,11 +587,17 @@ class MainWindow(QMainWindow):
         return devs[0] if devs else None
 
     def _remote_join_url(self, dev=None):
-        """Auto-sign-in link: /j/<token> survives camera apps that drop ?query."""
+        """Auto-sign-in link: /j/<token> survives camera apps that drop ?query.
+
+        Prefers the https Tailscale address when it's available, because
+        browsers only allow the phone microphone on a secure origin.
+        """
         dev = dev or self._current_device()
         if not dev:
             return self._remote_url()
-        return f"{self._remote_url()}/j/{dev['token']}"
+        https = self._https_url() if self._https_active() else None
+        base = https or self._remote_url()
+        return f"{base}/j/{dev['token']}"
 
     def _refresh_remote_labels(self):
         if not hasattr(self, "chk_remote"):
@@ -616,6 +622,20 @@ class MainWindow(QMainWindow):
             return None
         return f"https://{dns}"
 
+    def _https_active(self):
+        """True when Tailscale is actually serving our port over https."""
+        try:
+            import subprocess as sp
+            exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                               "Tailscale", "tailscale.exe")
+            if not os.path.exists(exe):
+                return False
+            out = sp.run([exe, "serve", "status"], capture_output=True,
+                         text=True, timeout=6).stdout or ""
+            return str(self.cfg["Main"].get("remote_port", "8765")) in out
+        except Exception:
+            return False
+
     def _refresh_https_label(self):
         url = self._https_url()
         if url:
@@ -630,18 +650,55 @@ class MainWindow(QMainWindow):
 
     def _setup_https(self):
         from core.remote_server import (enable_tailscale_serve,
-                                        tailscale_logged_in, tailscale_dns_name)
+                                        tailscale_dns_name, tailscale_logged_in,
+                                        tailscale_up)
         if not tailscale_logged_in():
-            self.log("Tailscale is not logged in - run 'tailscale up' first.")
+            self.log("Signing in to Tailscale - a browser page will open...")
+            ok, msg, url = tailscale_up()
+            if url:
+                self._to_clipboard(url)
+                self._open_url(url)
+                QMessageBox.information(
+                    self, "Finish Tailscale sign-in",
+                    "A Tailscale sign-in page has been opened in your browser "
+                    "(and copied to the clipboard).\n\n"
+                    "Finish signing in, then come back and press "
+                    "\"Set up HTTPS\" again.")
+                self._refresh_https_label()
+                return
+            self.log("Tailscale sign-in: " + (msg or "")[:200])
             self._refresh_https_label()
             return
         port = int(self.cfg["Main"].get("remote_port", "8765") or 8765)
         ok, msg = enable_tailscale_serve(port)
+        url = self._https_url()
         if ok:
-            self.log(f"HTTPS enabled. Phone link: {self._https_url()}")
+            # Tailscale Serve proxies from 127.0.0.1, so the local server has to
+            # accept loopback too (it may currently be bound to the LAN IP only).
+            if (self.cfg["Main"].get("remote_bind", "auto") or "").strip().lower() != "0.0.0.0":
+                self.cfg["Main"]["remote_bind"] = "0.0.0.0"
+                self.log("Listening on all local interfaces so Tailscale can "
+                         "reach it (access still requires the token).")
+                self._save_config()
+                self._start_remote(force=True)
+            self.log(f"HTTPS ready - open this on your phone: {url}")
+            if url:
+                self._to_clipboard(url)
+            QMessageBox.information(
+                self, "HTTPS is ready",
+                f"Open this on your phone:\n\n{url}\n\n"
+                "Use it instead of the http link. The microphone will then be "
+                "allowed (browsers only permit the mic over https).")
         else:
-            self.log("Tailscale serve failed: " + (msg or "")[:160])
+            self.log("Tailscale serve failed: " + (msg or "")[:200])
         self._refresh_https_label()
+
+    def _open_url(self, url):
+        try:
+            import subprocess as sp
+            sp.Popen(["cmd", "/c", "start", "", url])
+        except Exception:
+            pass
 
     def _qr_caption(self, dev):
         self.lbl_remote_qrfor.setText(
