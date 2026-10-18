@@ -12,10 +12,10 @@ A free Windows voice agent — talk to your PC, it shows what it heard and answe
 
 | File | Voice model | Size | Best for |
 |---|---|---|---|
-| `Agently-Setup-Lite.exe` | downloads on first use (needs internet once) | ~135 MB | smallest download |
-| `Agently-Setup-Full.exe` | bundled (works offline) | ~550 MB | no first-run download |
-| `Agently-Portable-Lite.zip` | downloads on first use | ~194 MB | no install |
-| `Agently-Portable-Full.zip` | bundled | ~620 MB | no install, offline |
+| `Agently-Setup-Lite.exe` | downloads on first use (needs internet once) | ~138 MB | smallest download |
+| `Agently-Setup-Full.exe` | bundled (works offline) | ~553 MB | no first-run download |
+| `Agently-Portable-Lite.zip` | downloads on first use | ~197 MB | no install |
+| `Agently-Portable-Full.zip` | bundled | ~623 MB | no install, offline |
 
 Installers create a Start Menu shortcut (and offer a desktop shortcut). Portable ZIPs just need to be extracted and `Agently.exe` run.
 
@@ -76,10 +76,10 @@ Agently is **not** code-signed (certificates cost money), so Windows may show a 
 
 ## SHA-256 checksums
 ```
-670e828cabd6a5f6ee4c9807a4f884dadafacd09bb91e8d99144556b13d3afe0  Agently-Setup-Full.exe
-ac7b253770de6b307274a736f4eb34f10d7fba51ab1164890a2a1fac98bd4b16  Agently-Setup-Lite.exe
-7706df737d2d3417949f4d27ad8ee92a1ca0dc8d0a3897d76680c5ae11ea933d  Agently-Portable-Full.zip
-57a468c6c8dd8047f0987717291692b6de89bb83ee0d926386a62f35408311b9  Agently-Portable-Lite.zip
+d0171e3e089400f927e42cc18496e45c68747ed2d893b2dc6542a4a21924b28e  Agently-Setup-Full.exe
+19a3341a7e5e1aa27ae73de81346506b8d468c25e7afbf6080c383fc293a1b2c  Agently-Setup-Lite.exe
+ed689b63a3058c6a71a49c8680625e177c3893e4b183cbc42667bc0004252092  Agently-Portable-Full.zip
+e6ed59022865c7e2a5ccc7b537e28dbb072b23a2d36fe0c18112c8e94c50a716  Agently-Portable-Lite.zip
 ```
 Verify on Windows: `certutil -hashfile Agently-Setup-Lite.exe SHA256`
 
