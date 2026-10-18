@@ -139,19 +139,31 @@ def tailscale_up():
 
 
 def enable_tailscale_serve(port):
-    """Expose the local server over HTTPS with a real Tailscale certificate."""
+    """Expose the local server over HTTPS with a real Tailscale certificate.
+
+    Returns (ok, message, needs_enable_url). Tailscale Serve has to be enabled
+    once per tailnet; until it is, the CLI prints the URL to switch it on, so
+    we hand it back for the app to open in the browser.
+    """
     exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
                        "Tailscale", "tailscale.exe")
     if not os.path.exists(exe):
-        return False, "Tailscale is not installed."
+        return False, "Tailscale is not installed.", ""
     try:
         out = subprocess.run(
             [exe, "serve", "--bg", f"http://127.0.0.1:{port}"],
             capture_output=True, text=True, timeout=25)
-        msg = (out.stdout or out.stderr or "").strip()
-        return out.returncode == 0, msg
+        msg = ((out.stdout or "") + (out.stderr or "")).strip()
     except Exception as e:
-        return False, str(e)
+        return False, str(e), ""
+    ok = out.returncode == 0
+    enable_url = ""
+    if not ok:
+        import re as _re
+        m = _re.search(r"https://login\.tailscale\.com/\S+", msg)
+        if m:
+            enable_url = m.group(0)
+    return ok, msg, enable_url
 
 
 def _server_ip(cfg):

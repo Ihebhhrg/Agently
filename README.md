@@ -120,18 +120,50 @@ That's it. Hold **Alt+Shift+V** and talk — everything runs on your PC.
 - **Status line** shows `Local Ollama — running ✔` when it's up, or `stopped (starts on use)`.
 
 ## Control it from your phone
-Agently can serve a small mobile web app so you can control your PC while you're out. It runs over your **private [Tailscale](https://tailscale.com) network**, so **no ports are opened on your router** and nothing is exposed to the public internet.
+Agently serves a small mobile web app so you can talk to your PC, watch its screen and run commands while you're away. It runs over your **private [Tailscale](https://tailscale.com) network**, so **no ports are opened on your router** and nothing is exposed to the public internet.
 
-**1. Install Tailscale** on your PC and on your phone, and sign both into the same account. (Free tier is fine.)
+### Setup — about 5 minutes
 
-**2. Turn on remote access.** In the Agently window check **Remote — control from your phone**. It shows a link and an access token; click **Copy link + token**.
+**On your PC**
+1. Install Agently, then install **Tailscale** for Windows and sign in.
+2. In the Agently window tick **Enable remote access**. A QR code appears.
+3. Click **Set up HTTPS**. The first time, Tailscale asks you to switch on
+   HTTPS serving for your network (one-off, for everyone on that network) —
+   Agently opens that page for you. Enable it, then press **Set up HTTPS** again.
 
-**3. Open it on your phone.** Make sure Tailscale is connected on the phone, open the link in the browser, paste the token once — and add the page to your home screen so it behaves like an app.
+**On your phone**
+4. Install the **Tailscale** app and sign in with the **same account**.
+5. Make sure Tailscale shows as **connected**.
+6. **Scan the QR code** with the phone's camera (or open the `https://…ts.net`
+   link Agently shows). You are signed in automatically — no token to type.
+7. Tap the orange mic and **allow microphone access**. You are asked once, ever.
+8. Optional: "Add to Home Screen" so it opens like a normal app.
 
-From there you can talk to it (big red mic button) or type, ask it to show your screen, and check your timers. Anything risky — running commands, shutdown/restart, deleting files, or typing/clicking on your PC — shows a **Yes / Cancel** button on the phone before it happens. The PC is kept awake only while your phone is connected.
+### Using it
+- 🎙 **Orange mic** — tap to start, tap again to send.
+- 🖥 **Monitor icon** — watch your PC screen live, with a fullscreen button.
+- 🔊 **Speaker icon** — hear whatever your PC is playing.
+- 📷 **Camera icon** — take a one-off screenshot (it appears in the chat).
+- ⚠️ **Yes / Cancel** — anything risky (running a command, shutdown, deleting a
+  file, typing or clicking on your PC) waits for you to tap **Yes**.
 
-**How it stays safe**
-- The server binds to the machine's Tailscale IP (never the public internet) and every request needs the access token (stored encrypted).
-- Risky actions are confirm-gated on the phone, so nothing dangerous runs from a typo or a misheard word.
-- Confirmations expire after 3 minutes, and the Catastrophic-command blocklist still applies.
+### Giving another person access
+Click **QR for another phone**, give it a name, and scan the new code. Each
+phone gets its **own token**, so you can **Revoke** one without affecting the
+others. Up to 6 devices.
+
+### If something isn't working
+| Symptom | Fix |
+|---|---|
+| Orange banner "Microphone needs a secure (https) address" | Press **Set up HTTPS** on the PC and open the `https://…ts.net` link. Browsers block the mic on plain http. |
+| Page says "offline" | Tailscale isn't connected on the phone. |
+| "Bad token" | That phone was revoked — scan a fresh QR. |
+| Screen view blank, header says "preview mode" | Your browser won't render MJPEG streaming; the fallback still shows the screen, just less smoothly. |
+
+### How it stays safe
+- The server binds only to your Tailscale interface (plus loopback), and every
+  request needs a per-device token stored encrypted (Windows DPAPI).
+- Risky actions are confirm-gated on the phone, so nothing dangerous runs from
+  a typo or a misheard word. Confirmations expire after 3 minutes.
+- The Catastrophic-command blocklist still applies to shell commands.
 

@@ -722,8 +722,23 @@ class MainWindow(QMainWindow):
             self._refresh_https_label()
             return
         port = int(self.cfg["Main"].get("remote_port", "8765") or 8765)
-        ok, msg = enable_tailscale_serve(port)
+        ok, msg, enable_url = enable_tailscale_serve(port)
         url = self._https_url()
+        if not ok and enable_url:
+            # Tailscale Serve needs switching on once per tailnet. Open that
+            # page for them instead of hiding it in the activity log.
+            self._to_clipboard(enable_url)
+            self._open_url(enable_url)
+            QMessageBox.information(
+                self, "One-time Tailscale step",
+                "Tailscale needs HTTPS serving switched on for your network "
+                "(only once, ever).\n\n"
+                "A confirmation page has been opened in your browser (and "
+                "copied to the clipboard). Enable it there, then press "
+                "\"Set up HTTPS\" again.")
+            self.log("Waiting for Tailscale Serve to be enabled.")
+            self._refresh_https_label()
+            return
         if ok:
             # Tailscale Serve proxies from 127.0.0.1, so the local server has to
             # accept loopback too (it may currently be bound to the LAN IP only).
@@ -743,6 +758,12 @@ class MainWindow(QMainWindow):
                 "allowed (browsers only permit the mic over https).")
         else:
             self.log("Tailscale serve failed: " + (msg or "")[:200])
+            QMessageBox.warning(
+                self, "Could not set up HTTPS",
+                "Tailscale would not start HTTPS serving.\n\n"
+                + (msg or "")[:400]
+                + "\n\nChat, typing and screen viewing still work over the "
+                  "http link; only the microphone needs https.")
         self._refresh_https_label()
 
     def _open_url(self, url):
