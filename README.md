@@ -6,7 +6,7 @@ A free Windows voice agent — talk to your PC, it shows what it heard and answe
 - Windows 10 or 11 (64-bit)
 - A microphone
 - Internet (for the AI "brain" and, on the Lite build, a one-time voice-model download)
-- A **free** Google Gemini API key (see below) — or run a **local model** with no key and no internet at all (see *Offline / local AI with Ollama*).
+- A **free** OpenRouter API key (see below) — or run a **local model** with no key and no internet at all (see *Offline / local AI with Ollama*).
 
 ## Downloads — pick one
 
@@ -20,9 +20,9 @@ A free Windows voice agent — talk to your PC, it shows what it heard and answe
 Installers create a Start Menu shortcut (and offer a desktop shortcut). Portable ZIPs just need to be extracted and `Agently.exe` run.
 
 ## First-time setup (2 minutes)
-1. Get a free Gemini API key: https://aistudio.google.com/apikey
+1. Get a free OpenRouter API key: https://openrouter.ai/keys
 2. Launch **Agently**.
-3. In the main window, open the **Brain** section → set **Provider = Gemini**, paste your key into the **API key** field, and click **Save**.
+3. In the main window, open the **Brain** section → set **Provider = OpenRouter**, paste your key into the **API key** field, and click **Save**.
 4. In **Microphone**, pick your microphone from the dropdown (if you speak and nothing is heard, try another device).
 5. Hold the push-to-talk hotkey (**Alt+Shift+V** by default) and talk, or switch the mode to always-on.
 
@@ -85,8 +85,14 @@ Verify on Windows: `certutil -hashfile Agently-Setup-Lite.exe SHA256`
 
 ## Switching AI providers
 In **Brain → Provider** you can choose:
-- **Gemini** (default, free tier) — paste a Gemini key.
-- **OpenRouter** — paste an OpenRouter key; a working free model is pre-set.
+- **OpenRouter** (default) — paste a free OpenRouter key. Uses free (`:free`) models.
+- **Local Ollama** — run a model **entirely offline** on your own PC, with no API key and no data leaving the machine. See the section below.
+
+Two separate models, because they do different jobs:
+- **Model** (commands) — `nvidia/nemotron-3.5-super-vl:free`. It must understand images, because it reads your screenshot to decide which window to click.
+- **Question model** (chat) — `nvidia/nemotron-3-ultra-550b-a55b:free`, a much larger, text-only model. Bigger models are slower, so if a reply feels slow, switch this to `nvidia/nemotron-3-super-120b-a12b:free` (same answers, ~1 s instead of ~20 s).
+
+Free OpenRouter models come and go. If a model stops working, the app automatically falls back to the one it's using for commands.
 - **Local (Ollama)** — run a model **entirely offline** on your own PC, with no API key and no data leaving the machine. See the section below.
 
 ## Offline / local AI with Ollama

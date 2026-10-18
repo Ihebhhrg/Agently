@@ -15,31 +15,31 @@ class OllamaClient:
     PC commands stay on the configured one.
     """
 
-    def __init__(self, cfg, service=None, provider_override=None):
+    def __init__(self, cfg, service=None, provider_override=None, model_override=None):
         self.cfg = cfg
         self.service = service
         self.provider = (provider_override
-                         or cfg['Main'].get('provider', 'gemini')
-                         or 'gemini').strip().lower()
+                         or cfg['Main'].get('provider', 'openrouter')
+                         or 'openrouter').strip().lower()
         preset = get_provider(self.provider)
         self.use_cloud = preset['use_cloud']
 
         if self.use_cloud:
             self.url = (cfg['Main'].get('api_host', '') or preset['host']).strip()
-            self.model = (cfg['Main'].get('cloud_model', '') or preset['models'][0]).strip()
+            self.model = (model_override
+                          or cfg['Main'].get('cloud_model', '')
+                          or preset['models'][0]).strip()
         else:
             self.url = cfg['Main'].get('ollama_host', preset['host']).strip()
-            self.model = (cfg['Main'].get('ollama_model', '') or preset['models'][0]).strip()
+            self.model = (model_override
+                          or cfg['Main'].get('ollama_model', '')
+                          or preset['models'][0]).strip()
 
         self.api_key = ''
         if preset['needs_key']:
             self.api_key = (cfg['Main'].get(key_name(self.provider), '') or '').strip()
-            # backward compatibility: older configs stored a single api_key
-            if not self.api_key and self.provider == 'gemini':
-                self.api_key = (cfg['Main'].get('api_key', '') or '').strip()
         self.temperature = float(cfg['Main'].get('temperature', 0.2))
         self.max_tokens = int(cfg['Main'].get('max_tokens', 800))
-        # Only Gemini (a cloud preset with a non-empty value) needs this.
         self.reasoning_effort = preset.get('reasoning_effort', '') if self.use_cloud else ''
 
     def _encode_image(self, img_path):

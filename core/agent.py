@@ -148,6 +148,7 @@ class Agent:
         self._bad_providers = set()
         self._chat_client = None
         self._chat_provider = None
+        self._chat_model = None
         self._lock = threading.Lock()
 
     # ---------- chat routing ----------
@@ -161,43 +162,62 @@ class Agent:
     def pick_chat_provider(self):
         """Which provider answers general questions.
 
-        "auto" only routes when a *better* option exists: a different cloud
+        "auto" only routes when a *stronger* option exists: a different cloud
         provider that already has a key. It never downgrades questions to the
         small local model just because it is free - local stays on commands.
         A provider that errored is skipped for the rest of the session.
         """
         want = (self.cfg["Main"].get("chat_provider", "auto") or "auto").strip().lower()
-        current = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()
+        current = (self.cfg["Main"].get("provider", "openrouter") or "openrouter").strip().lower()
         if want in ("same", "current", ""):
             return current
         if want != "auto":
             return want
-        for candidate in ("gemini", "openrouter"):
+        from core.providers import PROVIDER_ORDER
+        for candidate in PROVIDER_ORDER:
             if candidate == current or candidate in self._bad_providers:
                 continue
+            if not getp(candidate)["use_cloud"]:
+                continue          # never route questions to the small local model
             if self._has_key(candidate):
                 return candidate
-        # No stronger model configured -> stay on the current one.
         return current
+
+    def chat_model(self, provider=None):
+        """Model used for questions (may differ from the command model)."""
+        provider = provider or self.pick_chat_provider()
+        configured = (self.cfg["Main"].get("chat_model", "") or "").strip()
+        if configured:
+            return configured
+        from core.providers import chat_model_list
+        return chat_model_list(provider)[0]
 
     def chat_client(self):
         provider = self.pick_chat_provider()
         current = (self.cfg["Main"].get("provider", "") or "").strip().lower()
+        wanted_model = self.chat_model(provider)
         with self._lock:
-            if self._chat_client is None or self._chat_provider != provider:
-                if provider == current:
-                    self._chat_client = self.ollama
-                else:
+            # Rebuild whenever the provider *or* the model changes - questions
+            # usually use a different (text-only, larger) model than commands.
+            if self._chat_client is None or self._chat_provider != provider \
+                    or self._chat_model != wanted_model:
+                need_new = (provider != current
+                            or getattr(self.ollama, "model", "") != wanted_model)
+                if need_new:
                     from core.ollama import OllamaClient
                     try:
                         self._chat_client = OllamaClient(
                             self.cfg,
                             service=getattr(self.ollama, "service", None),
                             provider_override=provider,
+                            model_override=wanted_model,
                         )
                     except Exception:
                         self._chat_client = self.ollama
+                else:
+                    self._chat_client = self.ollama
                 self._chat_provider = provider
+                self._chat_model = wanted_model
             return self._chat_client
 
     def clear_memory(self):

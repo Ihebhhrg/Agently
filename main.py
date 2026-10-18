@@ -49,6 +49,7 @@ def load_config():
         except Exception:
             pass
     cfg.read(paths.CONFIG_PATH, encoding="utf-8")
+    _migrate_config(cfg)
     _merge_missing_defaults(cfg)
     # Keys on disk are DPAPI-encrypted; decrypt in memory, and migrate any
     # legacy plaintext keys once so they get encrypted immediately.
@@ -60,6 +61,28 @@ def load_config():
         except Exception:
             pass
     return cfg
+
+
+def _migrate_config(cfg):
+    """Move off removed providers (Gemini) and point at a working default."""
+    from core.providers import DEFAULT_PROVIDER, known
+    if not cfg.has_section("Main"):
+        return
+    changed = False
+    prov = (cfg["Main"].get("provider", "") or "").strip().lower()
+    if prov and not known(prov):
+        cfg["Main"]["provider"] = DEFAULT_PROVIDER
+        changed = True
+    # Gemini is gone for good - drop its leftovers.
+    for dead in ("gemini_key", "gemini_model"):
+        if cfg.has_option("Main", dead):
+            cfg["Main"].pop(dead)
+            changed = True
+    if changed:
+        try:
+            secretstore.save_config(cfg, paths.CONFIG_PATH)
+        except Exception:
+            pass
 
 
 def _merge_missing_defaults(cfg):
@@ -139,7 +162,7 @@ class MainWindow(QMainWindow):
         self.ollama_event.connect(self._refresh_status)
         self.ollama_event.connect(self._on_ollama_event)
         self.local_models.connect(self._on_local_models)
-        if (self.cfg["Main"].get("provider", "gemini") or "").strip().lower() == "local":
+        if (self.cfg["Main"].get("provider", "openrouter") or "").strip().lower() == "local":
             self._start_ollama_async()
 
         self.log("App started. Press Alt+Shift+V to talk, or use the buttons below.")
@@ -290,7 +313,7 @@ class MainWindow(QMainWindow):
         self.cmb_provider = QComboBox()
         for pid in providers.PROVIDER_ORDER:
             self.cmb_provider.addItem(providers.get(pid)["label"], pid)
-        cur_prov = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()
+        cur_prov = (self.cfg["Main"].get("provider", "openrouter") or "openrouter").strip().lower()
         pos = self.cmb_provider.findData(cur_prov)
         self.cmb_provider.setCurrentIndex(pos if pos >= 0 else 0)
         self.cmb_provider.currentIndexChanged.connect(self._change_provider)
@@ -308,7 +331,6 @@ class MainWindow(QMainWindow):
         self.cmb_chat_model = QComboBox()
         for label, val in (("Auto (smartest available)", "auto"),
                            ("Same as commands", "same"),
-                           ("Google Gemini", "gemini"),
                            ("OpenRouter", "openrouter"),
                            ("Local Ollama", "local")):
             self.cmb_chat_model.addItem(label, val)
@@ -317,6 +339,12 @@ class MainWindow(QMainWindow):
         self.cmb_chat_model.setCurrentIndex(pos if pos >= 0 else 0)
         self.cmb_chat_model.currentIndexChanged.connect(self._change_chat_provider)
         bform.addRow("Answers questions with:", self.cmb_chat_model)
+
+        self.cmb_chat_pick = QComboBox()
+        self.cmb_chat_pick.setEditable(True)
+        self._fill_chat_models(cur_chat if cur_chat in ("openrouter", "local") else "openrouter")
+        self.cmb_chat_pick.currentTextChanged.connect(self._change_chat_model)
+        bform.addRow("Question model:", self.cmb_chat_pick)
 
         self.lbl_chat_now = QLabel("")
         self.lbl_chat_now.setStyleSheet("color: #9A9A9A;")
@@ -472,7 +500,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_status(self):
         # provider / model
-        prov = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()
+        prov = (self.cfg["Main"].get("provider", "openrouter") or "openrouter").strip().lower()
         preset = providers.get(prov)
         model = (self.cfg["Main"].get("ollama_model", "?") if not preset["use_cloud"]
                  else self.cfg["Main"].get("cloud_model", "?"))
@@ -921,6 +949,30 @@ class MainWindow(QMainWindow):
     def _save_config(self):
         secretstore.save_config(self.cfg, paths.CONFIG_PATH)
 
+    def _fill_chat_models(self, provider):
+        from core.providers import chat_model_list
+        self.cmb_chat_pick.blockSignals(True)
+        self.cmb_chat_pick.clear()
+        models = chat_model_list(provider)
+        saved = (self.cfg["Main"].get("chat_model", "") or "").strip()
+        if saved and saved not in models:
+            models.insert(0, saved)
+        self.cmb_chat_pick.addItems(models)
+        self.cmb_chat_pick.setCurrentText(saved or (models[0] if models else ""))
+        self.cmb_chat_pick.blockSignals(False)
+
+    def _change_chat_model(self, text):
+        text = (text or "").strip()
+        if text:
+            self.cfg["Main"]["chat_model"] = text
+            self._save_config()
+            try:
+                self.agent._chat_client = None
+                self.agent._chat_model = None
+            except Exception:
+                pass
+            self._refresh_chat_label()
+
     def _change_chat_provider(self):
         val = self.cmb_chat_model.currentData()
         self.cfg["Main"]["chat_provider"] = val
@@ -929,8 +981,10 @@ class MainWindow(QMainWindow):
             self.agent.clear_memory()
             self.agent._chat_client = None
             self.agent._chat_provider = None
+            self.agent._chat_model = None
         except Exception:
             pass
+        self._fill_chat_models(val if val in ("openrouter", "local") else "openrouter")
         self._refresh_chat_label()
         self.log(f"Questions will be answered by: {self.cmb_chat_model.currentText()}")
 
@@ -940,12 +994,11 @@ class MainWindow(QMainWindow):
         try:
             from core.providers import get as getp
             p = self.agent.pick_chat_provider()
-            model = (self.cfg["Main"].get("ollama_model" if p == "local" else f"{p}_model", "")
-                     or getp(p)["models"][0])
+            model = self.agent.chat_model(p)
             n = self.agent.memory.size()
             self.lbl_chat_now.setText(
                 f"currently: {getp(p)['label']} — {model}  ·  memory: {n} message(s)")
-        except Exception as e:
+        except Exception:
             self.lbl_chat_now.setText("")
 
     def _clear_memory(self):
@@ -957,7 +1010,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _change_provider(self):
-        old = (self.cfg["Main"].get("provider", "gemini") or "gemini").strip().lower()
+        old = (self.cfg["Main"].get("provider", "openrouter") or "openrouter").strip().lower()
         new = self.cmb_provider.currentData()
 
         # remember the model/key we were just using, under the old provider's slots
