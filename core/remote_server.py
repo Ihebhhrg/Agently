@@ -249,47 +249,65 @@ class RemoteHandler(BaseHTTPRequestHandler):
 
     # ---------- live screen stream (MJPEG) ----------
     def _stream(self):
-        """Push a low-FPS downscaled JPEG of the screen to the phone."""
+        """Push a downscaled JPEG of the screen to the phone (near real-time)."""
         b = self.bridge
         if not b or not b.capture:
             return self._json({"type": "reply", "reply": "Screen capture unavailable."}, 404)
-        fps = 4
         try:
-            fps = max(1, min(8, int(self.cfg["Main"].get("remote_stream_fps", "4"))))
+            fps = float(self.cfg["Main"].get("remote_stream_fps", "12") or 12)
+            fps = max(1.0, min(30.0, fps))
         except Exception:
-            pass
+            fps = 12.0
+        try:
+            width = int(self.cfg["Main"].get("remote_stream_width", "560") or 560)
+        except Exception:
+            width = 560
+        quality = int(self.cfg["Main"].get("remote_stream_quality", "60") or 60)
+
         try:
             self.send_response(200)
             self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
         except Exception:
             return
 
         import io as _io
         import time as _time
-        from PIL import Image
-        deadline = _time.time() + 1800  # cap a single session at 30 minutes
+        interval = 1.0 / fps
+        deadline = _time.time() + 3600
+        next_at = _time.time()
         try:
             while _time.time() < deadline:
                 self._touch()
-                try:
-                    shot = b.capture.capture_full()
-                    im = Image.open(shot).convert("RGB")
-                    im.thumbnail((560, 560))
+                started = _time.time()
+                img = b.capture.grab_image(max_width=width)
+                if img is not None:
                     buf = _io.BytesIO()
-                    im.save(buf, format="JPEG", quality=55)
+                    img.save(buf, format="JPEG", quality=quality, optimize=False)
                     self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n")
                     self.wfile.write(buf.getvalue())
                     self.wfile.write(b"\r\n")
                     self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    return  # phone went away
-                except Exception:
-                    pass
-                _time.sleep(1.0 / fps)
+                else:
+                    _time.sleep(0.2)
+                    continue
+                next_at += interval
+                delay = next_at - _time.time()
+                if delay > 0:
+                    _time.sleep(delay)
+                else:
+                    next_at = _time.time()   # behind schedule, don't pile up
+        except (BrokenPipeError, ConnectionResetError):
+            pass
         except Exception:
             pass
+        finally:
+            try:
+                b.capture.close_stream()
+            except Exception:
+                pass
 
     # ---------- handlers ----------
     def _icon(self):
@@ -360,7 +378,8 @@ class RemoteServer:
         port = int(self.cfg["Main"].get("remote_port", "8765") or 8765)
         from core import remote_devices
         toks = tuple(remote_devices.valid_tokens(self.cfg))
-        handler = type("H", (RemoteHandler,), {"bridge": self.bridge, "tokens": toks})
+        handler = type("H", (RemoteHandler,),
+                    {"bridge": self.bridge, "tokens": toks, "cfg": self.cfg})
         try:
             self.httpd = ThreadingHTTPServer((ip, port), handler)
         except Exception as e:

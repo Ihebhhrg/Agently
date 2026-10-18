@@ -9,7 +9,43 @@ from PIL import Image
 class ScreenCapture:
     def __init__(self, cfg):
         self.cfg = cfg
-    
+        self._sct = None
+
+    # ---------- fast path for live streaming ----------
+    def _stream_handle(self):
+        # Reuse one capture handle; creating it per frame is very expensive.
+        if self._sct is None:
+            try:
+                self._sct = mss.mss()
+            except Exception:
+                self._sct = False
+        return self._sct or None
+
+    def grab_image(self, max_width=0):
+        """Grab the primary monitor straight into a PIL image (no PNG round-trip)."""
+        sct = self._stream_handle()
+        if sct is None:
+            return None
+        try:
+            mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            shot = sct.grab(mon)
+            # BGRX -> RGB without mss' slower .rgb conversion
+            img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+            if max_width and img.width > max_width:
+                h = max(1, int(img.height * max_width / img.width))
+                img = img.resize((max_width, h), Image.BILINEAR)
+            return img
+        except Exception:
+            return None
+
+    def close_stream(self):
+        try:
+            if self._sct:
+                self._sct.close()
+        except Exception:
+            pass
+        self._sct = None
+
     def capture_rect(self, rect) -> str:
         x, y, w, h = rect
         with mss.mss() as sct:
