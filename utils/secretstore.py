@@ -94,6 +94,11 @@ def save_config(cfg, path):
 
 
 def new_token():
-    """A fresh URL-safe access token for the remote web app."""
+    """A fresh access token for the remote web app.
+
+    Short enough to be readable/typed as a fallback (the QR is the normal
+    path), while still being 72 bits of entropy - ample for a device on a
+    private Tailscale network.
+    """
     import secrets as _secrets
-    return _secrets.token_urlsafe(24)
+    return _secrets.token_urlsafe(9)  # 12 chars

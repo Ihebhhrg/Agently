@@ -380,21 +380,27 @@ class MainWindow(QMainWindow):
         self.lbl_remote_token = QLabel("—")
         self.lbl_remote_token.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.lbl_remote_token.setWordWrap(True)
-        rform.addRow("Access token:", self.lbl_remote_token)
+        self.lbl_remote_token.setFont(QFont("Consolas", 11, QFont.Bold))
+        rform.addRow("Access token (fallback):", self.lbl_remote_token)
 
         rrow = QHBoxLayout()
+        b_copy = QPushButton("Copy token")
+        b_copy.setObjectName("Primary")
+        b_copy.clicked.connect(self._copy_token)
+        b_link = QPushButton("Copy sign-in link")
+        b_link.clicked.connect(self._copy_remote_info)
         b_newtok = QPushButton("New token")
         b_newtok.clicked.connect(self._new_remote_token)
-        b_copy = QPushButton("Copy link + token")
-        b_copy.clicked.connect(self._copy_remote_info)
-        rrow.addWidget(b_newtok)
         rrow.addWidget(b_copy)
+        rrow.addWidget(b_link)
+        rrow.addWidget(b_newtok)
         rrow.addStretch(1)
         rform.addRow(rrow)
 
         rnote = QLabel(
-            "Works only over your private Tailscale network (no open ports). "
-            "Risky actions always ask Yes/Cancel on your phone."
+            "Scanning the QR signs you in automatically — you never have to type "
+            "the token. The buttons above are only a fallback if the camera "
+            "can't read it."
         )
         rnote.setWordWrap(True)
         rform.addRow(rnote)
@@ -596,15 +602,22 @@ class MainWindow(QMainWindow):
         self._refresh_remote_labels()
         self.log("New remote access token generated.")
 
-    def _copy_remote_info(self):
+    def _copy_token(self):
         tok = self.cfg["Main"].get("remote_token", "")
-        info = f"{self._remote_url()}\nToken: {tok}\nAuto-login link: {self._remote_url()}?t={tok}"
+        self._to_clipboard(tok)
+        self.log("Token copied to clipboard.")
+
+    def _to_clipboard(self, text):
         try:
             import subprocess as sp
-            sp.Popen(["clip"], stdin=sp.PIPE, text=True).communicate(info)
-            self.log("Link + token copied to clipboard.")
+            sp.Popen(["clip"], stdin=sp.PIPE, text=True).communicate(text)
         except Exception:
             self.log("Copy failed - select and copy the text manually.")
+
+    def _copy_remote_info(self):
+        tok = self.cfg["Main"].get("remote_token", "")
+        self._to_clipboard(f"{self._remote_url()}?t={tok}")
+        self.log("Sign-in link copied - paste it anywhere or send it to yourself.")
 
     def _start_remote(self, force=False):
         if not self.cfg["Main"].getboolean("remote_enabled", False) and not force:
