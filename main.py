@@ -11,7 +11,7 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QComboBox, QCheckBox, QGroupBox, QFormLayout, QStatusBar,
-    QLineEdit, QMessageBox, QGridLayout
+    QLineEdit, QMessageBox, QGridLayout, QScrollArea, QFrame
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QTextCursor, QIcon
@@ -97,7 +97,8 @@ class MainWindow(QMainWindow):
         self.remote = None
         self.remote_bridge = None
         self.setWindowTitle("Agently — Voice Agent")
-        self.resize(560, 680)
+        self.resize(760, 900)
+        self.setMinimumWidth(520)
 
         # core components
         self.overlay = VoiceOverlay(self.cfg)
@@ -148,7 +149,26 @@ class MainWindow(QMainWindow):
 
     # ---------- UI ----------
     def _build_ui(self):
+        # Everything lives in a scroll area so the window never squashes the
+        # controls when the content is taller than the window (small screens,
+        # high DPI scaling, or long provider/model names).
+        outer = QWidget()
+        outer_root = QVBoxLayout(outer)
+        outer_root.setContentsMargins(0, 0, 0, 0)
+        outer_root.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setAlignment(Qt.AlignTop)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; } "
+                             "QScrollArea > QWidget > QWidget { background: transparent; }")
+
         central = QWidget()
+        scroll.setWidget(central)
+        outer_root.addWidget(scroll)
+
         root = QVBoxLayout(central)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(10)
@@ -200,8 +220,10 @@ class MainWindow(QMainWindow):
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setFont(QFont("Consolas", 9))
+        self.log_box.setMinimumHeight(120)
+        self.log_box.setMaximumHeight(200)
         llay.addWidget(self.log_box)
-        root.addWidget(lb, stretch=1)
+        root.addWidget(lb, stretch=0)
 
         # settings
         setb = QGroupBox("Settings")
@@ -363,7 +385,17 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Ready")
 
-        self.setCentralWidget(central)
+        self.setCentralWidget(outer)
+
+    def resizeEvent(self, e):
+        # Keep the settings readable on wide monitors instead of stretching
+        # one giant column across 2000px.
+        super().resizeEvent(e)
+        try:
+            w = max(520, min(e.size().width() - 24, 980))
+            self.findChild(QScrollArea).setMaximumWidth(w + 24)
+        except Exception:
+            pass
 
     # ---------- helpers ----------
     def log(self, msg):
