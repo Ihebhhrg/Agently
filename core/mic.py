@@ -199,8 +199,6 @@ class MicListener:
                 if candidate != dev:
                     dlog(f"MIC: device {dev} unusable, fell back to {candidate} "
                          f"({names.get(candidate, 'system default')})")
-                    self._err(f"Microphone {names.get(dev, dev)} can't record at "
-                              f"16 kHz - switched to {names.get(candidate, 'system default')}.")
                 dlog(f"MIC stream started ok on device={candidate}")
                 return
             except Exception as e:

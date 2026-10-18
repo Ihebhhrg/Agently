@@ -49,29 +49,31 @@ PAGE_HTML = r"""<!doctype html>
   #yes { background:var(--acc); color:#14100c; }
   #no  { background:#26262c; color:var(--fg); }
 
-.inrow { display:flex; gap:9px; align-items:center; }
-  input[type=text] { flex:1 1 auto; min-width:0; padding:13px 15px; border-radius:22px; border:1px solid var(--line);
-    background:var(--card); color:var(--fg); font-size:16px; outline:none; }
+/* ---- compact, minimal controls ---- */
+  .inrow { display:flex; gap:8px; align-items:center; }
+  input[type=text] { flex:1 1 auto; min-width:0; padding:12px 15px; border-radius:20px;
+    border:1px solid var(--line); background:var(--card); color:var(--fg);
+    font-size:16px; outline:none; }
   input[type=text]:focus { border-color:var(--acc); }
 
-  /* ---- big obvious talk button ---- */
-  #talk { display:flex; gap:11px; align-items:center; justify-content:center;
-    width:100%; margin:0 0 11px; padding:15px; border:none; border-radius:16px;
-    background:var(--acc); color:#14100c; font-size:16px; font-weight:700;
-    box-shadow:0 4px 14px rgba(255,107,0,.32); }
-  #talk:active { transform:translateY(1px); }
-  #talk .ico { font-size:24px; line-height:1; }
-  #talk .sub { font-size:11px; font-weight:600; opacity:.75; display:block; }
-  #talk.rec { background:#FF3B30; color:#fff; animation:recpulse 1s infinite; }
-  @keyframes recpulse {
-    0%,100% { box-shadow:0 0 0 0 rgba(255,59,48,.55); }
-    50%     { box-shadow:0 0 0 12px rgba(255,59,48,0); }
-  }
+  .ico { flex:0 0 44px; width:44px; height:44px; border-radius:50%;
+    border:1px solid var(--line); background:var(--card); color:var(--mut);
+    display:grid; place-items:center; padding:0; }
+  .ico svg { width:20px; height:20px; display:block; }
+  .ico:active { background:#1f1f24; }
+  .ico.on { background:var(--acc); border-color:var(--acc); color:#14100c; }
 
-  button.icon { width:44px; height:44px; flex:0 0 44px; border-radius:50%; border:1px solid var(--line);
-    background:var(--card); color:var(--fg); font-size:18px; display:grid; place-items:center; }
-  button.icon.on { background:var(--acc); color:#14100c; border-color:var(--acc); }
-  button.icon:disabled { opacity:.4; }
+  /* mic: compact orange circle */
+  #talk { flex:0 0 46px; width:46px; height:46px; border-radius:50%; border:none;
+    background:var(--acc); color:#14100c; display:grid; place-items:center;
+    padding:0; box-shadow:0 2px 10px rgba(255,107,0,.28); }
+  #talk svg { width:21px; height:21px; display:block; }
+  #talk:active { transform:scale(.95); }
+  #talk.rec { background:#FF3B30; animation:recpulse 1.1s infinite; }
+  @keyframes recpulse {
+    0%,100% { box-shadow:0 0 0 0 rgba(255,59,48,.5); }
+    50%     { box-shadow:0 0 0 9px rgba(255,59,48,0); }
+  }
 
   #shot { display:none; padding:0 14px 10px; }
   #shot img { width:100%; border-radius:12px; border:1px solid var(--line); display:block; }
@@ -118,7 +120,7 @@ PAGE_HTML = r"""<!doctype html>
   <span class="lbl" id="stat"></span>
 </header>
 
-<div id="log"><div class="sys">Say something, or tap the big Talk button below.</div></div>
+<div id="log"><div class="sys">Tap the mic to talk, or type a message.</div></div>
 <div id="shot"><img id="shotimg" alt="screen"></div>
 
 <div id="live">
@@ -132,12 +134,25 @@ PAGE_HTML = r"""<!doctype html>
     <div class="d" id="askd"></div>
     <div class="row"><button id="no">Cancel</button><button id="yes">Yes, do it</button></div>
   </div>
-  <button id="talk"><span class="ico">&#127897;</span><span>TALK
-    <span class="sub">tap to start, tap again to stop</span></span></button>
   <div class="inrow">
-    <input id="txt" type="text" placeholder="Or type a message..." autocomplete="off">
-    <button class="icon" id="livebtn" title="Watch my screen">&#128250;</button>
-    <button class="icon" id="cam" title="One screenshot">&#128247;</button>
+    <button id="talk" aria-label="Talk"><svg viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+      <path d="M5 11a7 7 0 0 0 14 0"></path>
+      <line x1="12" y1="18" x2="12" y2="22"></line>
+    </svg></button>
+    <input id="txt" type="text" placeholder="Message Agently..." autocomplete="off">
+    <button class="ico" id="livebtn" aria-label="Watch my screen"><svg viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3.5" width="20" height="13" rx="2"></rect>
+      <line x1="8" y1="21" x2="16" y2="21"></line>
+      <line x1="12" y1="16.5" x2="12" y2="21"></line>
+    </svg></button>
+    <button class="ico" id="cam" aria-label="Take a screenshot"><svg viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 8.5A2 2 0 0 1 5 6.5h1.5l1-2h4l1 2H17a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+      <circle cx="11" cy="12.5" r="3.2"></circle>
+    </svg></button>
   </div>
 </div>
 
@@ -249,6 +264,7 @@ PAGE_HTML = r"""<!doctype html>
 
   // ---- big TALK button (mic asked once, then never again) ----
   var warmStream = null;
+  var MIC_SVG = talkEl.innerHTML;   // keep the mic glyph so we can restore it
 
   function micGrantedFlag() {
     try { return localStorage.getItem("agently_mic_ok") === "1"; } catch (e) { return false; }
@@ -286,8 +302,7 @@ PAGE_HTML = r"""<!doctype html>
       rec.ondataavailable = function (e) { chunks.push(e.data); };
       rec.onstop = function () {
         talkEl.classList.remove("rec");
-        talkEl.querySelector(".ico").textContent = "\uD83C\uDFA4";
-        talkEl.childNodes[1].firstChild.textContent = "TALK ";
+        talkEl.innerHTML = MIC_SVG;
         rec = null;
         var blob = new Blob(chunks, { type: chunks[0] ? chunks[0].type : "audio/webm" });
         if (!blob.size) { add("sys", "Nothing recorded."); return; }
@@ -306,8 +321,10 @@ PAGE_HTML = r"""<!doctype html>
       };
       rec.start();
       talkEl.classList.add("rec");
-      talkEl.querySelector(".ico").textContent = "\u25A0";
-      talkEl.childNodes[1].firstChild.textContent = "STOP - TAP TO SEND ";
+      talkEl.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" ' +
+        'stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
+      statEl.textContent = "listening…";
+      statEl.style.color = "#FF3B30";
     }).catch(function () {
       add("sys", micGrantedFlag()
         ? "Microphone is blocked for this site - re-allow it in your browser settings."
