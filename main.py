@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self.cfg = load_config()
         self.remote = None
         self.remote_bridge = None
+        self._qr_dev = None
         self.setWindowTitle("Agently — Voice Agent")
         self.resize(760, 900)
         self.setMinimumWidth(520)
@@ -365,42 +366,46 @@ class MainWindow(QMainWindow):
         self.lbl_remote_qr.setFixedSize(132, 132)
         self.lbl_remote_qr.setAlignment(Qt.AlignCenter)
         self.lbl_remote_qr.setStyleSheet(
-            f"background: white; border-radius: 8px; padding: 6px;")
+            "background: white; border-radius: 8px; padding: 6px;")
         qrrow.addWidget(self.lbl_remote_qr)
-        qrtip = QLabel(
-            "Scan this with your phone's camera to open Agently and sign in "
-            "automatically. Works over your Tailscale network only."
-        )
-        qrtip.setWordWrap(True)
-        qrtip.setStyleSheet("color: #9A9A9A;")
-        qrtip.setAlignment(Qt.AlignVCenter)
-        qrrow.addWidget(qrtip, stretch=1)
+        self.lbl_remote_qrfor = QLabel("—")
+        self.lbl_remote_qrfor.setWordWrap(True)
+        self.lbl_remote_qrfor.setAlignment(Qt.AlignVCenter)
+        qrrow.addWidget(self.lbl_remote_qrfor, stretch=1)
         rform.addRow("Quick connect:", qrrow)
 
-        self.lbl_remote_token = QLabel("—")
-        self.lbl_remote_token.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.lbl_remote_token.setWordWrap(True)
-        self.lbl_remote_token.setFont(QFont("Consolas", 11, QFont.Bold))
-        rform.addRow("Access token (fallback):", self.lbl_remote_token)
+        dbtns = QHBoxLayout()
+        b_newqr = QPushButton("QR for another phone")
+        b_newqr.clicked.connect(self._new_remote_device)
+        b_copylink = QPushButton("Copy this link")
+        b_copylink.clicked.connect(self._copy_remote_info)
+        dbtns.addWidget(b_newqr)
+        dbtns.addWidget(b_copylink)
+        dbtns.addStretch(1)
+        rform.addRow(dbtns)
+
+        self.lbl_remote_devices = QLabel("")
+        self.lbl_remote_devices.setWordWrap(True)
+        rform.addRow("Paired phones:", self.lbl_remote_devices)
+
+        self.dev_box = QVBoxLayout()
+        rform.addRow(self.dev_box)
 
         rrow = QHBoxLayout()
         b_copy = QPushButton("Copy token")
         b_copy.setObjectName("Primary")
         b_copy.clicked.connect(self._copy_token)
-        b_link = QPushButton("Copy sign-in link")
-        b_link.clicked.connect(self._copy_remote_info)
-        b_newtok = QPushButton("New token")
+        b_newtok = QPushButton("Reset all")
         b_newtok.clicked.connect(self._new_remote_token)
         rrow.addWidget(b_copy)
-        rrow.addWidget(b_link)
         rrow.addWidget(b_newtok)
         rrow.addStretch(1)
         rform.addRow(rrow)
 
         rnote = QLabel(
-            "Scanning the QR signs you in automatically — you never have to type "
-            "the token. The buttons above are only a fallback if the camera "
-            "can't read it."
+            "Scanning the QR signs that phone in automatically — no typing. "
+            "Every phone gets its own QR and token, so you can hand one to a "
+            "family member and revoke it later without affecting the others."
         )
         rnote.setWordWrap(True)
         rform.addRow(rnote)
@@ -462,8 +467,23 @@ class MainWindow(QMainWindow):
             self.lbl_mic.setText("muted 🔇")
         elif getattr(self.mic, "running", False):
             self.lbl_mic.setText("listening 🎙")
+            self._remember_working_mic()
         else:
             self.lbl_mic.setText("stopped ✘")
+
+    def _remember_working_mic(self):
+        """If the mic had to fall back to another device, remember it."""
+        used = getattr(self.mic, "device_in_use", None)
+        if used is None or getattr(self, "_persisted_mic", None) == used:
+            return
+        self._persisted_mic = used
+        try:
+            if (self.cfg["Main"].get("mic_device", "default") or "").strip() != str(used):
+                self.cfg["Main"]["mic_device"] = str(used)
+                secretstore.save_config(self.cfg, paths.CONFIG_PATH)
+                self.log(f"Microphone switched to device {used} (the saved one could not record).")
+        except Exception:
+            pass
 
     def _populate_mics(self):
         self.cmb_mic.blockSignals(True)
@@ -546,25 +566,42 @@ class MainWindow(QMainWindow):
         port = self.cfg["Main"].get("remote_port", "8765")
         return f"http://{ip}:{port}"
 
-    def _remote_join_url(self):
+    def _devices(self):
+        from core import remote_devices
+        return remote_devices.load(self.cfg)
+
+    def _current_device(self):
+        """The device whose QR is on screen (the first one)."""
+        devs = self._devices()
+        return devs[0] if devs else None
+
+    def _remote_join_url(self, dev=None):
         """Auto-sign-in link: /j/<token> survives camera apps that drop ?query."""
-        tok = self.cfg["Main"].get("remote_token", "")
-        return f"{self._remote_url()}/j/{tok}"
+        dev = dev or self._current_device()
+        if not dev:
+            return self._remote_url()
+        return f"{self._remote_url()}/j/{dev['token']}"
 
     def _refresh_remote_labels(self):
         if not hasattr(self, "chk_remote"):
             return
-        if self.cfg["Main"].getboolean("remote_enabled", False):
-            self.lbl_remote_url.setText(self._remote_url())
-        else:
-            self.lbl_remote_url.setText("disabled")
-        tok = self.cfg["Main"].get("remote_token", "") or ""
-        self.lbl_remote_token.setText(tok if tok else "(none yet - click New token)")
-        if self.cfg["Main"].getboolean("remote_enabled", False) and tok:
-            self._draw_remote_qr(self._remote_join_url())
+        on = self.cfg["Main"].getboolean("remote_enabled", False)
+        self.lbl_remote_url.setText(self._remote_url() if on else "disabled")
+        dev = getattr(self, "_qr_dev", None) or self._current_device()
+        if on and dev:
+            self._qr_dev = dev
+            self._qr_caption(dev)
+            self._draw_remote_qr(self._remote_join_url(dev))
         else:
             self.lbl_remote_qr.setPixmap(QPixmap())
             self.lbl_remote_qr.setText("—")
+            self.lbl_remote_qrfor.setText("Enable remote access to get a QR.")
+        self._rebuild_device_list()
+
+    def _qr_caption(self, dev):
+        self.lbl_remote_qrfor.setText(
+            f"This QR is for: <b>{dev.get('name')}</b><br>"
+            "<span style='color:#9A9A9A'>Scan it with that phone's camera.</span>")
 
     def _draw_remote_qr(self, text):
         """Render a scannable QR (auto-login link) into the Remote panel."""
@@ -581,15 +618,77 @@ class MainWindow(QMainWindow):
             img.save(buf)
             self.lbl_remote_qr.setPixmap(QPixmap(buf))
             self.lbl_remote_qr.setText("")
-        except Exception as e:
+        except Exception:
             self.lbl_remote_qr.setPixmap(QPixmap())
             self.lbl_remote_qr.setText("QR unavailable")
+
+    def _rebuild_device_list(self):
+        """Show each paired phone with its own Show QR / Revoke buttons."""
+        from core import remote_devices
+        lay = self.dev_box
+        while lay.count():
+            it = lay.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        for d in self._devices():
+            row = QWidget()
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(6)
+            lbl = QLabel(remote_devices.describe(d))
+            h.addWidget(lbl, stretch=1)
+            b_open = QPushButton("Show QR")
+            b_open.setFixedHeight(28)
+            b_open.clicked.connect(lambda _=False, dd=d: self._show_device_qr(dd))
+            b_rev = QPushButton("Revoke")
+            b_rev.setFixedHeight(28)
+            b_rev.setStyleSheet("color: #e74c3c;")
+            b_rev.clicked.connect(lambda _=False, dd=d: self._revoke_device(dd))
+            h.addWidget(b_open)
+            h.addWidget(b_rev)
+            lay.addWidget(row)
+
+    def _show_device_qr(self, dev):
+        self._qr_dev = dev
+        self._qr_caption(dev)
+        self._draw_remote_qr(self._remote_join_url(dev))
+
+    def _revoke_device(self, dev):
+        from core import remote_devices
+        remote_devices.remove(self.cfg, dev["id"])
+        if getattr(self, "_qr_dev", None) and self._qr_dev.get("id") == dev.get("id"):
+            self._qr_dev = None
+        self._save_config()
+        self._start_remote(force=True)
+        self.log(f"Revoked access for {dev.get('name')}.")
+
+    def _new_remote_device(self):
+        from core import remote_devices
+        edit = QLineEdit(f"Phone {len(self._devices()) + 1}")
+        box = QMessageBox(self)
+        box.setWindowTitle("Pair another phone")
+        box.setText("Name this phone")
+        box.setInformativeText('For example: "Alice", "Work", "Tablet".')
+        box.setTextEdit(edit)
+        ok = box.addButton("Create QR", QMessageBox.AcceptRole)
+        box.addButton("Cancel", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is not ok:
+            return
+        dev = remote_devices.add(self.cfg, edit.text().strip() or "Phone")
+        self._save_config()
+        self._start_remote(force=True)
+        self._show_device_qr(dev)
+        self.log(f"Created a QR for {dev.get('name')}.")
 
     def _toggle_remote(self, state):
         on = bool(state)
         self.cfg["Main"]["remote_enabled"] = "true" if on else "false"
-        if on and not self.cfg["Main"].get("remote_token", ""):
-            self.cfg["Main"]["remote_token"] = secretstore.new_token()
+        if on:
+            from core import remote_devices
+            remote_devices.migrate_legacy(self.cfg)
+            if not remote_devices.load(self.cfg):
+                remote_devices.add(self.cfg, "My phone")
         self._save_config()
         if on:
             self._start_remote()
@@ -599,17 +698,20 @@ class MainWindow(QMainWindow):
         self.log("Remote access: " + ("enabled" if on else "disabled"))
 
     def _new_remote_token(self):
-        self.cfg["Main"]["remote_token"] = secretstore.new_token()
+        """Reset everything: revoke every phone and issue one fresh QR."""
+        from core import remote_devices
+        remote_devices.write(self.cfg, [])
+        self.cfg["Main"]["remote_token"] = ""
+        dev = remote_devices.add(self.cfg, "My phone")
+        self._qr_dev = dev
         self._save_config()
-        if self.remote:
-            self.remote.httpd = None
-            self._start_remote(force=True)
-        self._refresh_remote_labels()
-        self.log("New remote access token generated.")
+        self._start_remote(force=True)
+        self._show_device_qr(dev)
+        self.log("All previous phones revoked - new QR issued.")
 
     def _copy_token(self):
-        tok = self.cfg["Main"].get("remote_token", "")
-        self._to_clipboard(tok)
+        dev = getattr(self, "_qr_dev", None) or self._current_device()
+        self._to_clipboard(dev["token"] if dev else "")
         self.log("Token copied to clipboard.")
 
     def _to_clipboard(self, text):
@@ -620,8 +722,9 @@ class MainWindow(QMainWindow):
             self.log("Copy failed - select and copy the text manually.")
 
     def _copy_remote_info(self):
-        self._to_clipboard(self._remote_join_url())
-        self.log("Sign-in link copied - open it on your phone (no token needed).")
+        dev = getattr(self, "_qr_dev", None) or self._current_device()
+        self._to_clipboard(self._remote_join_url(dev))
+        self.log(f"Sign-in link copied for {dev.get('name') if dev else 'phone'}.")
 
     def _start_remote(self, force=False):
         if not self.cfg["Main"].getboolean("remote_enabled", False) and not force:
@@ -629,11 +732,10 @@ class MainWindow(QMainWindow):
         if self.remote and self.remote.httpd and not force:
             return
         self._stop_remote()
-        tok = self.cfg["Main"].get("remote_token", "")
-        if not tok:
-            self.cfg["Main"]["remote_token"] = secretstore.new_token()
+        from core import remote_devices
+        if not remote_devices.load(self.cfg):
+            remote_devices.add(self.cfg, "My phone")
             self._save_config()
-            tok = self.cfg["Main"].get("remote_token", "")
         from core.remote_bridge import RemoteBridge
         from core.remote_server import RemoteServer
         bridge = RemoteBridge(self.cfg, log=self.log)

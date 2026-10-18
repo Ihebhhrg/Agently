@@ -101,7 +101,13 @@ class RemoteHandler(BaseHTTPRequestHandler):
     server_version = "Agently"
     sys_version = ""
     bridge = None
-    token = ""
+    tokens = ()          # every valid device token
+
+    def _token_ok(self, value):
+        import hmac
+        if not value:
+            return False
+        return any(hmac.compare_digest(value, t) for t in (self.tokens or ()))
 
     def log_message(self, fmt, *args):
         pass
@@ -125,32 +131,28 @@ class RemoteHandler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj))
 
     def _authed(self):
-        import hmac
-        if not self.token:
-            return False
         got = self.headers.get("X-Agently-Token", "") or ""
         if not got:
             # <img> tags cannot set headers, so the live stream passes ?t=.
             from urllib.parse import urlparse, parse_qs
             q = parse_qs(urlparse(self.path).query).get("t", [""])[0]
             got = q
-        if got and hmac.compare_digest(got, self.token):
+        if self._token_ok(got):
             return True
         # Also accept the cookie set by the /j/<token> join link.
         cookie = self.headers.get("Cookie", "") or ""
         for part in cookie.split(";"):
             name, _, val = part.strip().partition("=")
-            if name == "agently_tok" and hmac.compare_digest(val, self.token):
+            if name == "agently_tok" and self._token_ok(val):
                 return True
         return False
 
     def _cookie_token(self):
         """Token carried by the join-link cookie, if valid."""
-        import hmac
         cookie = self.headers.get("Cookie", "") or ""
         for part in cookie.split(";"):
             name, _, val = part.strip().partition("=")
-            if name == "agently_tok" and self.token and hmac.compare_digest(val, self.token):
+            if name == "agently_tok" and self._token_ok(val):
                 return val
         return ""
 
@@ -196,9 +198,8 @@ class RemoteHandler(BaseHTTPRequestHandler):
         # The token is injected straight into the page AND stored in a cookie,
         # so sign-in works even if the browser refuses to keep cookies.
         if path.startswith("/j/") and len(path) > 3:
-            import hmac
             tok = path[3:]
-            if self.token and hmac.compare_digest(tok, self.token):
+            if self._token_ok(tok):
                 self._touch()
                 html = PAGE_HTML.replace(
                     "<script>",
@@ -357,8 +358,9 @@ class RemoteServer:
     def start(self):
         ip = _server_ip(self.cfg)
         port = int(self.cfg["Main"].get("remote_port", "8765") or 8765)
-        handler = type("H", (RemoteHandler,),
-                       {"bridge": self.bridge, "token": self.cfg["Main"].get("remote_token", "")})
+        from core import remote_devices
+        toks = tuple(remote_devices.valid_tokens(self.cfg))
+        handler = type("H", (RemoteHandler,), {"bridge": self.bridge, "tokens": toks})
         try:
             self.httpd = ThreadingHTTPServer((ip, port), handler)
         except Exception as e:

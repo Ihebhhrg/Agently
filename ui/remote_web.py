@@ -247,14 +247,44 @@ PAGE_HTML = r"""<!doctype html>
 
   txtEl.addEventListener("keydown", function (e) { if (e.key === "Enter") send(txtEl.value), txtEl.value = ""; });
 
-  // ---- big TALK button ----
+  // ---- big TALK button (mic asked once, then never again) ----
+  var warmStream = null;
+
+  function micGrantedFlag() {
+    try { return localStorage.getItem("agently_mic_ok") === "1"; } catch (e) { return false; }
+  }
+  function markMicGranted() {
+    try { localStorage.setItem("agently_mic_ok", "1"); } catch (e) {}
+  }
+
+  // Open the mic stream exactly once and keep it warm, so the browser's
+  // permission prompt appears only the first time and never again.
+  function openMic() {
+    if (warmStream) return Promise.resolve(warmStream);
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      warmStream = s;
+      markMicGranted();
+      return s;
+    });
+  }
+
+  // If permission was already given earlier, silently keep the mic warm so the
+  // first tap is instant. Never triggers a prompt.
+  function warmMicIfAllowed() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    navigator.permissions.query({ name: "microphone" }).then(function (p) {
+      if (p.state === "granted" && micGrantedFlag()) {
+        openMic().catch(function () {});
+      }
+    }).catch(function () {});
+  }
+
   talkEl.onclick = function () {
     if (rec) { rec.stop(); return; }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    openMic().then(function (stream) {
       rec = new MediaRecorder(stream); chunks = [];
       rec.ondataavailable = function (e) { chunks.push(e.data); };
       rec.onstop = function () {
-        stream.getTracks().forEach(function (t) { t.stop(); });
         talkEl.classList.remove("rec");
         talkEl.querySelector(".ico").textContent = "\uD83C\uDFA4";
         talkEl.childNodes[1].firstChild.textContent = "TALK ";
@@ -278,8 +308,13 @@ PAGE_HTML = r"""<!doctype html>
       talkEl.classList.add("rec");
       talkEl.querySelector(".ico").textContent = "\u25A0";
       talkEl.childNodes[1].firstChild.textContent = "STOP - TAP TO SEND ";
-    }).catch(function () { add("sys", "Microphone blocked - allow mic access for this site."); });
+    }).catch(function () {
+      add("sys", micGrantedFlag()
+        ? "Microphone is blocked for this site - re-allow it in your browser settings."
+        : "Allow microphone access once - Agently will remember and never ask again.");
+    });
   };
+  warmMicIfAllowed();
 
   // ---- live screen stream ----
   function stopLive() {

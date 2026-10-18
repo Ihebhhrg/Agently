@@ -47,6 +47,40 @@ def pick_best_device():
     return best
 
 
+def _supports_16k(idx):
+    """True if this input device can actually open at 16 kHz mono."""
+    try:
+        sd.check_input_settings(device=idx, samplerate=SR, channels=1)
+        return True
+    except Exception:
+        return False
+
+
+def fallback_devices(preferred):
+    """Other input devices that can do 16 kHz, best match first.
+
+    USB mics get re-enumerated and the saved index can end up pointing at a
+    48 kHz stereo endpoint that cannot record at our rate. Rather than losing
+    the microphone entirely we hop to a compatible one - preferring the same
+    physical mic (same name, new index) over an unrelated virtual device.
+    """
+    devices = list_input_devices()
+    names = {i: n for i, n, _c in devices}
+    want_name = (names.get(preferred, "") or "").strip().lower()
+    usable = [i for i, _n, _c in devices if _supports_16k(i)]
+    if preferred in usable:
+        return []
+    rest = [i for i in usable if i != preferred]
+
+    def rank(i):
+        same = 0 if (names.get(i, "") or "").strip().lower() == want_name else 1
+        near = abs(i - preferred) if isinstance(preferred, int) else i
+        return (same, near)
+
+    rest.sort(key=rank)
+    return rest
+
+
 class MicListener:
     """
     Microphone engine with two modes:
@@ -71,6 +105,7 @@ class MicListener:
         self.sr = SR
         self.frames_per_block = 480  # 30 ms
         self.stream = None
+        self.device_in_use = None
         self.running = False
         self.muted = False
         self.mode = (cfg["Main"].get("listen_mode", "ptt") or "ptt").strip().lower()
@@ -144,21 +179,37 @@ class MicListener:
         dev = self._resolve_device()
         names = {i: n for i, n, _ in list_input_devices()}
         dlog(f"MIC start: mode={self.mode} device={dev} ({names.get(dev, 'system default')})")
-        try:
-            self.stream = sd.InputStream(
-                samplerate=self.sr,
-                channels=1,
-                dtype="float32",
-                blocksize=self.frames_per_block,
-                device=dev,
-                callback=self._callback,
-            )
-            self.stream.start()
-            dlog(f"MIC stream started ok on device={dev}")
-        except Exception as e:
-            self.running = False
-            self._err(f"Could not open microphone: {e}")
-            dlog(f"MIC stream FAILED: {e}")
+
+        # Try the chosen device, then any compatible one, then let sounddevice
+        # pick the system default. A mic that works beats a mic that's "selected".
+        order = [dev] + fallback_devices(dev) + [None]
+        last_err = None
+        for candidate in order:
+            try:
+                self.stream = sd.InputStream(
+                    samplerate=self.sr,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=self.frames_per_block,
+                    device=candidate,
+                    callback=self._callback,
+                )
+                self.stream.start()
+                self.device_in_use = candidate
+                if candidate != dev:
+                    dlog(f"MIC: device {dev} unusable, fell back to {candidate} "
+                         f"({names.get(candidate, 'system default')})")
+                    self._err(f"Microphone {names.get(dev, dev)} can't record at "
+                              f"16 kHz - switched to {names.get(candidate, 'system default')}.")
+                dlog(f"MIC stream started ok on device={candidate}")
+                return
+            except Exception as e:
+                last_err = e
+                self.stream = None
+                continue
+        self.running = False
+        self._err(f"Could not open microphone: {last_err}")
+        dlog(f"MIC stream FAILED: {last_err}")
 
     def stop(self):
         self.running = False

@@ -15,7 +15,8 @@ except Exception:  # pywin32 is a hard runtime dependency, so this is just a saf
     _HAVE_DPAPI = False
 
 PREFIX = "dpapi:"
-KEY_FIELDS = ("gemini_key", "openrouter_key", "api_key", "remote_token")
+KEY_FIELDS = ("gemini_key", "openrouter_key", "api_key", "remote_token",
+              "remote_devices")
 _DESCRIPTION = "Agently"
 
 
