@@ -249,20 +249,28 @@ class RemoteHandler(BaseHTTPRequestHandler):
 
     # ---------- live screen stream (MJPEG) ----------
     def _stream(self):
-        """Push a downscaled JPEG of the screen to the phone (near real-time)."""
+        """Push a downscaled JPEG of the screen to the phone (near real-time).
+
+        Capture and JPEG encoding run on a worker thread while the connection
+        thread just writes finished frames out on a fixed cadence, so the two
+        costs overlap instead of adding up.
+        """
         b = self.bridge
         if not b or not b.capture:
             return self._json({"type": "reply", "reply": "Screen capture unavailable."}, 404)
         try:
-            fps = float(self.cfg["Main"].get("remote_stream_fps", "12") or 12)
-            fps = max(1.0, min(30.0, fps))
+            fps = float(self.cfg["Main"].get("remote_stream_fps", "30") or 30)
+            fps = max(1.0, min(60.0, fps))
         except Exception:
-            fps = 12.0
+            fps = 30.0
         try:
             width = int(self.cfg["Main"].get("remote_stream_width", "560") or 560)
         except Exception:
             width = 560
-        quality = int(self.cfg["Main"].get("remote_stream_quality", "60") or 60)
+        try:
+            quality = int(self.cfg["Main"].get("remote_stream_quality", "55") or 55)
+        except Exception:
+            quality = 55
 
         try:
             self.send_response(200)
@@ -274,25 +282,60 @@ class RemoteHandler(BaseHTTPRequestHandler):
             return
 
         import io as _io
+        import queue
+        import threading
         import time as _time
+
+        frames = queue.Queue(maxsize=2)
+        stop = threading.Event()
+
+        def producer():
+            """Grab + encode continuously; always keep the newest frame."""
+            prev_digest = None
+            while not stop.is_set():
+                img = b.capture.grab_image(max_width=width)
+                if img is None:
+                    _time.sleep(0.15)
+                    continue
+                # A static screen doesn't need re-encoding at all.
+                try:
+                    digest = img.tobytes()[:4096]
+                except Exception:
+                    digest = None
+                if digest is not None and digest == prev_digest:
+                    _time.sleep(0.02)
+                    continue
+                prev_digest = digest
+                try:
+                    buf = _io.BytesIO()
+                    img.save(buf, format="JPEG", quality=quality, optimize=False)
+                    data = buf.getvalue()
+                except Exception:
+                    continue
+                if frames.full():
+                    try:
+                        frames.get_nowait()   # drop the stale one
+                    except queue.Empty:
+                        pass
+                frames.put(data)
+
+        th = threading.Thread(target=producer, daemon=True)
+        th.start()
+
         interval = 1.0 / fps
         deadline = _time.time() + 3600
         next_at = _time.time()
         try:
-            while _time.time() < deadline:
+            while _time.time() < deadline and not stop.is_set():
                 self._touch()
-                started = _time.time()
-                img = b.capture.grab_image(max_width=width)
-                if img is not None:
-                    buf = _io.BytesIO()
-                    img.save(buf, format="JPEG", quality=quality, optimize=False)
-                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n")
-                    self.wfile.write(buf.getvalue())
-                    self.wfile.write(b"\r\n")
-                    self.wfile.flush()
-                else:
-                    _time.sleep(0.2)
+                try:
+                    data = frames.get(timeout=1.0)
+                except queue.Empty:
                     continue
+                self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n\r\n")
+                self.wfile.write(data)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
                 next_at += interval
                 delay = next_at - _time.time()
                 if delay > 0:
@@ -304,6 +347,7 @@ class RemoteHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
         finally:
+            stop.set()
             try:
                 b.capture.close_stream()
             except Exception:

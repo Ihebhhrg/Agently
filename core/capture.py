@@ -32,8 +32,16 @@ class ScreenCapture:
             # BGRX -> RGB without mss' slower .rgb conversion
             img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
             if max_width and img.width > max_width:
-                h = max(1, int(img.height * max_width / img.width))
-                img = img.resize((max_width, h), Image.BILINEAR)
+                # reduce() is a cheap box-average downscale, then a small
+                # bilinear pass to land exactly on the target width.
+                k = max(1, int(img.width // max_width))
+                if k > 1:
+                    img = img.reduce(k)
+                if img.width != max_width:
+                    img = img.resize(
+                        (max_width, max(1, int(img.height * max_width / img.width))),
+                        Image.BILINEAR,
+                    )
             return img
         except Exception:
             return None
