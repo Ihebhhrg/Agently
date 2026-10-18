@@ -314,9 +314,28 @@ class RemoteHandler(BaseHTTPRequestHandler):
             return self._screenshot()
         if path == "/api/stream.mjpg":
             return self._stream()
+        if path == "/api/snap.jpg":
+            return self._snap()
         if path == "/api/audio.pcm":
             return self._audio_stream()
         return self._json({"error": "not found"}, 404)
+
+    # ---------- single frame as a plain JPEG (proxy/browser friendly) ----------
+    def _snap(self):
+        b = self.bridge
+        if not b or not b.capture:
+            return self._send(404, b"", "text/plain")
+        try:
+            width = int(self.cfg["Main"].get("remote_stream_width", "560") or 560)
+        except Exception:
+            width = 560
+        img = b.capture.grab_image(max_width=width)
+        if img is None:
+            return self._send(503, b"", "text/plain")
+        import io as _io
+        buf = _io.BytesIO()
+        img.save(buf, format="JPEG", quality=60, optimize=False)
+        return self._send(200, buf.getvalue(), "image/jpeg")
 
     # ---------- system audio stream (raw 16 kHz mono PCM) ----------
     def _audio_stream(self):

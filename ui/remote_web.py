@@ -80,8 +80,8 @@ PAGE_HTML = r"""<!doctype html>
 
   /* ---- live screen view ---- */
   #live { display:none; padding:0 14px 10px; }
-  #live img { width:100%; border-radius:12px; border:1px solid var(--line);
-    display:block; background:#000; }
+  #live img { width:100%; aspect-ratio:16/9; object-fit:contain; border-radius:12px;
+    border:1px solid var(--line); display:block; background:#000; min-height:120px; }
   .livebar { display:flex; align-items:center; gap:8px; margin-bottom:6px;
     font-size:11px; color:var(--mut); font-weight:600; }
   .livebar .rd { width:8px; height:8px; border-radius:50%; background:#FF3B30;
@@ -474,24 +474,57 @@ PAGE_HTML = r"""<!doctype html>
   setCrossed(true);
 
   // ---- live screen stream ----
+  var liveTimer = null, liveMode = "";
+
   function stopLive() {
     liveOn = false;
+    if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+    liveMode = "";
     liveImg.removeAttribute("src");
     liveEl.style.display = "none";
     liveBtn.classList.remove("on");
     document.getElementById("livenote").textContent = "";
   }
+
+  // Some browsers/proxies never render a multipart MJPEG stream. Fall back to
+  // polling whole JPEG snapshots, which is slower but always displays.
+  function startSnapshots() {
+    if (liveMode === "snap") return;
+    liveMode = "snap";
+    document.getElementById("livenote").textContent = "(preview mode)";
+    var tick = function () {
+      if (!liveOn) return;
+      var img = new Image();
+      img.onload = function () {
+        if (liveOn && liveMode === "snap") {
+          liveImg.src = this.src;
+        }
+      };
+      img.src = "/api/snap.jpg?t=" + encodeURIComponent(TOKEN) + "&_=" + Date.now();
+    };
+    tick();
+    liveTimer = setInterval(tick, 220);
+  }
+
   liveBtn.onclick = function () {
     if (liveOn) { stopLive(); return; }
     liveOn = true;
+    liveMode = "mjpeg";
     liveEl.style.display = "block";
     liveBtn.classList.add("on");
+    document.getElementById("livenote").textContent = "connecting…";
     liveImg.src = "/api/stream.mjpg?t=" + encodeURIComponent(TOKEN) + "&_=" + Date.now();
+    // If nothing renders in time, switch to snapshot mode automatically.
+    setTimeout(function () {
+      if (liveOn && liveMode === "mjpeg" && !liveImg.naturalWidth) {
+        liveImg.removeAttribute("src");
+        startSnapshots();
+      }
+    }, 5000);
   };
   liveImg.onerror = function () {
     if (!liveOn) return;
-    document.getElementById("livenote").textContent = "(stream stopped - tap to retry)";
-    liveOn = false; liveBtn.classList.remove("on");
+    if (liveMode === "mjpeg") startSnapshots();
   };
 
   // ---- one-off screenshot ----
