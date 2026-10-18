@@ -111,6 +111,14 @@ PAGE_HTML = r"""<!doctype html>
 <script>
 (function () {
   var TOKEN = localStorage.getItem("agently_token") || "";
+  // A scanned QR link may carry ?t=<token> to log straight in.
+  (function () {
+    var m = /[?&]t=([^&]+)/.exec(location.search);
+    if (m) {
+      try { TOKEN = decodeURIComponent(m[1]); localStorage.setItem("agently_token", TOKEN); } catch (e) {}
+      history.replaceState(null, "", location.pathname);
+    }
+  })();
   var logEl = document.getElementById("log"), askEl = document.getElementById("ask");
   var askd = document.getElementById("askd"), statEl = document.getElementById("stat");
   var dotEl = document.getElementById("dot"), shotEl = document.getElementById("shot");

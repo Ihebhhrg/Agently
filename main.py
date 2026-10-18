@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QMessageBox, QGridLayout, QScrollArea, QFrame
 )
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QTextCursor, QIcon
+from PySide6.QtGui import QFont, QTextCursor, QIcon, QPixmap
 from ui.theme import STYLESHEET
 
 from ui.overlay import VoiceOverlay
@@ -359,6 +359,24 @@ class MainWindow(QMainWindow):
         self.lbl_remote_url.setWordWrap(True)
         rform.addRow("Open on your phone:", self.lbl_remote_url)
 
+        # QR code: scan with the phone camera to open + log straight in
+        qrrow = QHBoxLayout()
+        self.lbl_remote_qr = QLabel("—")
+        self.lbl_remote_qr.setFixedSize(132, 132)
+        self.lbl_remote_qr.setAlignment(Qt.AlignCenter)
+        self.lbl_remote_qr.setStyleSheet(
+            f"background: white; border-radius: 8px; padding: 6px;")
+        qrrow.addWidget(self.lbl_remote_qr)
+        qrtip = QLabel(
+            "Scan this with your phone's camera to open Agently and sign in "
+            "automatically. Works over your Tailscale network only."
+        )
+        qrtip.setWordWrap(True)
+        qrtip.setStyleSheet("color: #9A9A9A;")
+        qrtip.setAlignment(Qt.AlignVCenter)
+        qrrow.addWidget(qrtip, stretch=1)
+        rform.addRow("Quick connect:", qrrow)
+
         self.lbl_remote_token = QLabel("—")
         self.lbl_remote_token.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.lbl_remote_token.setWordWrap(True)
@@ -531,6 +549,30 @@ class MainWindow(QMainWindow):
             self.lbl_remote_url.setText("disabled")
         tok = self.cfg["Main"].get("remote_token", "") or ""
         self.lbl_remote_token.setText(tok if tok else "(none yet - click New token)")
+        if self.cfg["Main"].getboolean("remote_enabled", False) and tok:
+            self._draw_remote_qr(self._remote_url() + "?t=" + tok)
+        else:
+            self.lbl_remote_qr.setPixmap(QPixmap())
+            self.lbl_remote_qr.setText("—")
+
+    def _draw_remote_qr(self, text):
+        """Render a scannable QR (auto-login link) into the Remote panel."""
+        try:
+            import qrcode
+            qr = qrcode.QRCode(border=2, box_size=4,
+                               error_correction=qrcode.constants.ERROR_CORRECT_M)
+            qr.add_data(text)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+            img = img.resize((120, 120))
+            buf = os.path.join(paths.LOGS_DIR, "_remote_qr.png")
+            os.makedirs(paths.LOGS_DIR, exist_ok=True)
+            img.save(buf)
+            self.lbl_remote_qr.setPixmap(QPixmap(buf))
+            self.lbl_remote_qr.setText("")
+        except Exception as e:
+            self.lbl_remote_qr.setPixmap(QPixmap())
+            self.lbl_remote_qr.setText("QR unavailable")
 
     def _toggle_remote(self, state):
         on = bool(state)
@@ -555,7 +597,8 @@ class MainWindow(QMainWindow):
         self.log("New remote access token generated.")
 
     def _copy_remote_info(self):
-        info = f"{self._remote_url()}\nToken: {self.cfg['Main'].get('remote_token', '')}"
+        tok = self.cfg["Main"].get("remote_token", "")
+        info = f"{self._remote_url()}\nToken: {tok}\nAuto-login link: {self._remote_url()}?t={tok}"
         try:
             import subprocess as sp
             sp.Popen(["clip"], stdin=sp.PIPE, text=True).communicate(info)
