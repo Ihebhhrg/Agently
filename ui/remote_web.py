@@ -87,6 +87,24 @@ PAGE_HTML = r"""<!doctype html>
   .livebar .rd { width:8px; height:8px; border-radius:50%; background:#FF3B30;
     animation:blink 1s infinite; }
   @keyframes blink { 50% { opacity:.25; } }
+  .livebar .sp { flex:1; }
+  .mini { flex:0 0 30px; width:30px; height:30px; border-radius:8px; padding:0;
+    border:1px solid var(--line); background:var(--card); color:var(--mut);
+    display:grid; place-items:center; }
+  .mini svg { width:15px; height:15px; display:block; }
+  .mini.on { color:var(--acc); border-color:var(--acc); }
+  .mini:active { background:#1f1f24; }
+
+  #live.fs { position:fixed; inset:0; z-index:20; background:#000;
+    display:flex; flex-direction:column; justify-content:center; }
+  #live.fs .livebar { position:absolute; top:calc(8px + env(safe-area-inset-top));
+    left:12px; right:12px; }
+  #live.fs img { border:0; border-radius:0; width:100%; height:100%;
+    object-fit:contain; }
+
+  #micwarn { display:none; margin:0 14px 10px; padding:11px 13px; border-radius:12px;
+    background:#2a1a10; border:1px solid #FF6B00; color:#ffd9bd; font-size:12.5px;
+    line-height:1.45; }
 
   #gate { position:fixed; inset:0; background:var(--bg); display:grid; place-items:center;
           padding:24px; z-index:9; }
@@ -124,8 +142,34 @@ PAGE_HTML = r"""<!doctype html>
 <div id="shot"><img id="shotimg" alt="screen"></div>
 
 <div id="live">
-  <div class="livebar"><span class="rd"></span> LIVE SCREEN <span id="livenote"></span></div>
+  <div class="livebar">
+    <span class="rd"></span> LIVE SCREEN <span id="livenote"></span>
+    <span class="sp"></span>
+    <button class="mini" id="sndbtn" aria-label="Sound">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <line id="sndx" x1="17" y1="9" x2="23" y2="15"></line>
+        <line id="sndx2" x1="23" y1="9" x2="17" y2="15"></line>
+      </svg>
+    </button>
+    <button class="mini" id="fsbtn" aria-label="Fullscreen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="4 9 4 4 9 4"></polyline>
+        <polyline points="15 4 20 4 20 9"></polyline>
+        <polyline points="20 15 20 20 15 20"></polyline>
+        <polyline points="9 20 4 20 4 15"></polyline>
+      </svg>
+    </button>
+  </div>
   <img id="liveimg" alt="live screen">
+</div>
+
+<div id="micwarn" class="warn">
+  <b>Microphone needs a secure (https) address.</b><br>
+  Browsers block the mic on plain http. Run <b>Set up HTTPS</b> in the Agently
+  app on your PC, then open the https link it gives you.
 </div>
 
 <div id="bar">
@@ -265,6 +309,13 @@ PAGE_HTML = r"""<!doctype html>
   // ---- big TALK button (mic asked once, then never again) ----
   var warmStream = null;
   var MIC_SVG = talkEl.innerHTML;   // keep the mic glyph so we can restore it
+  var secure = (window.isSecureContext !== false);
+
+  function micWarn(show) {
+    var w = document.getElementById("micwarn");
+    if (w) w.style.display = show ? "block" : "none";
+  }
+  if (!secure) micWarn(true);
 
   function micGrantedFlag() {
     try { return localStorage.getItem("agently_mic_ok") === "1"; } catch (e) { return false; }
@@ -277,6 +328,9 @@ PAGE_HTML = r"""<!doctype html>
   // permission prompt appears only the first time and never again.
   function openMic() {
     if (warmStream) return Promise.resolve(warmStream);
+    if (!secure) {
+      return Promise.reject(new Error("insecure"));
+    }
     return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
       warmStream = s;
       markMicGranted();
@@ -325,13 +379,99 @@ PAGE_HTML = r"""<!doctype html>
         'stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
       statEl.textContent = "listening…";
       statEl.style.color = "#FF3B30";
-    }).catch(function () {
-      add("sys", micGrantedFlag()
-        ? "Microphone is blocked for this site - re-allow it in your browser settings."
-        : "Allow microphone access once - Agently will remember and never ask again.");
+    }).catch(function (e) {
+      if (e && e.message === "insecure") {
+        add("sys", "Microphone is blocked because this page is not https. "
+          + "Use the https link from Agently (Set up HTTPS).");
+        micWarn(true);
+      } else {
+        add("sys", micGrantedFlag()
+          ? "Microphone is blocked for this site - re-allow it in your browser settings."
+          : "Allow microphone access once - Agently will remember and never ask again.");
+      }
     });
   };
   warmMicIfAllowed();
+
+  // ---- fullscreen toggle (works on iPhone too, where the API doesn't) ----
+  var fsBtn = document.getElementById("fsbtn");
+  fsBtn.onclick = function () {
+    if (liveEl.classList.contains("fs")) {
+      liveEl.classList.remove("fs");
+      fsBtn.classList.remove("on");
+    } else {
+      liveEl.classList.add("fs");
+      fsBtn.classList.add("on");
+      if (liveEl.requestFullscreen) { try { liveEl.requestFullscreen(); } catch (e) {} }
+    }
+  };
+
+  // ---- system audio (what the PC is playing) ----
+  var actx = null, audioOn = false, nextAudioAt = 0, audioStop = false;
+
+  function audioCtx() {
+    if (!actx) {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      actx = new C();
+    }
+    if (actx.state === "suspended") actx.resume();
+    return actx;
+  }
+
+  function playPcm(bytes) {
+    var ctx = actx; if (!ctx) return;
+    var n = bytes.length >> 1;
+    if (!n) return;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var buf = ctx.createBuffer(1, n, 16000);
+    var ch = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+    if (nextAudioAt < ctx.currentTime) nextAudioAt = ctx.currentTime + 0.05;
+    if (nextAudioAt - ctx.currentTime > 0.8) nextAudioAt = ctx.currentTime + 0.05; // resync
+    var src = ctx.createBufferSource();
+    src.buffer = buf; src.connect(ctx.destination); src.start(nextAudioAt);
+    nextAudioAt += buf.duration;
+  }
+
+  async function startAudio() {
+    var ctx = audioCtx(); if (!ctx) return;
+    audioOn = true; audioStop = false;
+    nextAudioAt = ctx.currentTime + 0.15;
+    document.getElementById("sndbtn").classList.add("on");
+    setCrossed(false);
+    try {
+      var resp = await fetch("/api/audio.pcm?t=" + encodeURIComponent(TOKEN));
+      if (!resp.ok || !resp.body) throw new Error("no audio");
+      var reader = resp.body.getReader();
+      while (audioOn) {
+        var r = await reader.read();
+        if (r.done) break;
+        if (r.value) playPcm(r.value);
+      }
+    } catch (e) {
+      if (audioOn) add("sys", "System audio unavailable on this PC.");
+    }
+    audioOn = false;
+    document.getElementById("sndbtn").classList.remove("on");
+  }
+
+  function stopAudio() {
+    audioOn = false; audioStop = true;
+    document.getElementById("sndbtn").classList.remove("on");
+    setCrossed(true);
+  }
+
+  function setCrossed(muted) {
+    var a = document.getElementById("sndx"), b = document.getElementById("sndx2");
+    if (a) a.style.display = muted ? "" : "none";
+    if (b) b.style.display = muted ? "" : "none";
+  }
+
+  document.getElementById("sndbtn").onclick = function () {
+    if (audioOn) stopAudio(); else startAudio();
+  };
+  setCrossed(true);
 
   // ---- live screen stream ----
   function stopLive() {

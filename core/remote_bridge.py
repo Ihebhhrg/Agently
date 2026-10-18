@@ -75,6 +75,7 @@ class RemoteBridge:
         self.stt = None
         self.capture = None
         self.timers = None
+        self.audio = None          # optional loopback audio for the live stream
         self.confirm_all = cfg["Main"].getboolean("remote_confirm_all", True)
         self._pending = {}      # confirm_id -> {"action", "desc", "ts"}
         self._lock = threading.Lock()

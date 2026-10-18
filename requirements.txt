@@ -12,3 +12,5 @@ pillow>=10.3.0
 requests>=2.32.0
 opencv-python-headless>=4.10.0.84
 psutil>=5.9.0
+qrcode>=7.4.0
+soundcard>=0.4.4

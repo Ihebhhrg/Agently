@@ -11,7 +11,7 @@ binaries = []
 hiddenimports = [
     "win32com.client", "pythoncom", "pywintypes", "win32api",
     "win32gui", "win32process", "win32con", "win32crypt",
-    "pyautogui", "mss", "psutil", "requests", "qrcode",
+    "pyautogui", "mss", "psutil", "requests", "qrcode", "soundcard",
 ]
 
 for _pkg in ("rapidocr_onnxruntime", "onnxruntime", "ctranslate2", "av", "sounddevice"):

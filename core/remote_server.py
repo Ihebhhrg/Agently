@@ -70,6 +70,58 @@ def tailscale_ip():
     return None
 
 
+def tailscale_dns_name():
+    """This machine's *.ts.net hostname, or None when Tailscale isn't logged in.
+
+    A real HTTPS certificate for this name is what makes the browser treat the
+    page as a secure origin - which is required for the phone's microphone.
+    """
+    exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                       "Tailscale", "tailscale.exe")
+    if not os.path.exists(exe):
+        return None
+    try:
+        out = subprocess.run([exe, "status", "--json"], capture_output=True,
+                             text=True, timeout=6)
+        import json as _json
+        data = _json.loads(out.stdout or "{}")
+        dns = ((data.get("Self") or {}).get("DNSName") or "").strip()
+        return dns.rstrip(".") or None
+    except Exception:
+        return None
+
+
+def tailscale_logged_in():
+    exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                       "Tailscale", "tailscale.exe")
+    if not os.path.exists(exe):
+        return False
+    try:
+        out = subprocess.run([exe, "status", "--json"], capture_output=True,
+                             text=True, timeout=6)
+        import json as _json
+        data = _json.loads(out.stdout or "{}")
+        return (data.get("BackendState") or "") == "Running"
+    except Exception:
+        return False
+
+
+def enable_tailscale_serve(port):
+    """Expose the local server over HTTPS with a real Tailscale certificate."""
+    exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"),
+                       "Tailscale", "tailscale.exe")
+    if not os.path.exists(exe):
+        return False, "Tailscale is not installed."
+    try:
+        out = subprocess.run(
+            [exe, "serve", "--bg", f"http://127.0.0.1:{port}"],
+            capture_output=True, text=True, timeout=25)
+        msg = (out.stdout or out.stderr or "").strip()
+        return out.returncode == 0, msg
+    except Exception as e:
+        return False, str(e)
+
+
 def _server_ip(cfg):
     mode = (cfg["Main"].get("remote_bind", "auto") or "auto").strip().lower()
     if mode in ("localhost", "127.0.0.1", "loopback"):
@@ -230,7 +282,41 @@ class RemoteHandler(BaseHTTPRequestHandler):
             return self._screenshot()
         if path == "/api/stream.mjpg":
             return self._stream()
+        if path == "/api/audio.pcm":
+            return self._audio_stream()
         return self._json({"error": "not found"}, 404)
+
+    # ---------- system audio stream (raw 16 kHz mono PCM) ----------
+    def _audio_stream(self):
+        b = self.bridge
+        audio = getattr(b, "audio", None) if b else None
+        if audio is None or not audio.available:
+            return self._json({"error": "audio unavailable"}, 503)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/l16; rate=16000; channels=1")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+        except Exception:
+            return
+        if not audio.start():
+            return
+        import time as _time
+        deadline = _time.time() + 3600
+        try:
+            while _time.time() < deadline:
+                self._touch()
+                chunk = audio.next_chunk(timeout=1.0)
+                if chunk:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:
+            pass
+        finally:
+            audio.stop()
 
     def do_POST(self):
         path = self.path.split("?")[0]
@@ -367,6 +453,14 @@ class RemoteHandler(BaseHTTPRequestHandler):
     def _status(self):
         info = {"online": True, "timers": 0}
         b = self.bridge
+        try:
+            import ssl as _ssl  # noqa: F401
+            info["secure"] = bool(self.headers.get("X-Forwarded-Proto") == "https") or \
+                (self.headers.get("Host", "").endswith(".ts.net"))
+        except Exception:
+            info["secure"] = False
+        if b and getattr(b, "audio", None) is not None:
+            info["audio"] = bool(b.audio.available)
         if b and b.timers:
             try:
                 info["timers"] = len(b.timers.list_items())

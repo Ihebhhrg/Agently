@@ -391,6 +391,17 @@ class MainWindow(QMainWindow):
         self.dev_box = QVBoxLayout()
         rform.addRow(self.dev_box)
 
+        # HTTPS: browsers only allow the phone mic on a secure origin.
+        self.lbl_https = QLabel("")
+        self.lbl_https.setWordWrap(True)
+        rform.addRow("Phone mic (https):", self.lbl_https)
+        hrow = QHBoxLayout()
+        b_https = QPushButton("Set up HTTPS")
+        b_https.clicked.connect(self._setup_https)
+        hrow.addWidget(b_https)
+        hrow.addStretch(1)
+        rform.addRow(hrow)
+
         rrow = QHBoxLayout()
         b_copy = QPushButton("Copy token")
         b_copy.setObjectName("Primary")
@@ -598,6 +609,40 @@ class MainWindow(QMainWindow):
             self.lbl_remote_qrfor.setText("Enable remote access to get a QR.")
         self._rebuild_device_list()
 
+    def _https_url(self):
+        from core.remote_server import tailscale_dns_name
+        dns = tailscale_dns_name()
+        if not dns:
+            return None
+        return f"https://{dns}"
+
+    def _refresh_https_label(self):
+        url = self._https_url()
+        if url:
+            self.lbl_https.setText(
+                f'<a href="{url}" style="color:#FF6B00">{url}</a><br>'
+                "<span style='color:#9A9A9A'>Open this https link on the phone "
+                "so the microphone works.</span>")
+        else:
+            self.lbl_https.setText(
+                "Not available yet - log in to Tailscale on this PC, then press "
+                "Set up HTTPS. (Browsers only allow the phone mic on https.)")
+
+    def _setup_https(self):
+        from core.remote_server import (enable_tailscale_serve,
+                                        tailscale_logged_in, tailscale_dns_name)
+        if not tailscale_logged_in():
+            self.log("Tailscale is not logged in - run 'tailscale up' first.")
+            self._refresh_https_label()
+            return
+        port = int(self.cfg["Main"].get("remote_port", "8765") or 8765)
+        ok, msg = enable_tailscale_serve(port)
+        if ok:
+            self.log(f"HTTPS enabled. Phone link: {self._https_url()}")
+        else:
+            self.log("Tailscale serve failed: " + (msg or "")[:160])
+        self._refresh_https_label()
+
     def _qr_caption(self, dev):
         self.lbl_remote_qrfor.setText(
             f"This QR is for: <b>{dev.get('name')}</b><br>"
@@ -738,12 +783,17 @@ class MainWindow(QMainWindow):
             self._save_config()
         from core.remote_bridge import RemoteBridge
         from core.remote_server import RemoteServer
+        from core.remote_audio import LoopbackAudio
         bridge = RemoteBridge(self.cfg, log=self.log)
         bridge.agent = self.agent
         bridge.control = self.control
         bridge.stt = self.stt
         bridge.capture = self.capture
         bridge.timers = self.timers
+        try:
+            bridge.audio = LoopbackAudio(self.cfg, log=self.log)
+        except Exception:
+            bridge.audio = None
         self.remote_bridge = bridge
         self.remote = RemoteServer(self.cfg, bridge, log=self.log)
         self.remote.start()
