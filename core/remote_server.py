@@ -344,8 +344,10 @@ class RemoteHandler(BaseHTTPRequestHandler):
         if audio is None or not audio.available:
             return self._json({"error": "audio unavailable"}, 503)
         try:
+            from core.remote_audio import CHUNK_MS, OUT_CHANNELS, OUT_RATE
             self.send_response(200)
-            self.send_header("Content-Type", "audio/l16; rate=16000; channels=1")
+            self.send_header("Content-Type",
+                             f"audio/l16; rate={OUT_RATE}; channels={OUT_CHANNELS}")
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()

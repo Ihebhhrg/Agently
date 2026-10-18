@@ -439,12 +439,15 @@ PAGE_HTML = r"""<!doctype html>
 
   function playPcm(bytes) {
     var ctx = actx; if (!ctx) return;
-    var n = bytes.length >> 1;
-    if (!n) return;
+    var frames = bytes.length >> 2;          // 2 channels * 2 bytes
+    if (!frames) return;
     var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    var buf = ctx.createBuffer(1, n, 16000);
-    var ch = buf.getChannelData(0);
-    for (var i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+    var buf = ctx.createBuffer(2, frames, 48000);
+    var l = buf.getChannelData(0), r = buf.getChannelData(1);
+    for (var i = 0; i < frames; i++) {
+      l[i] = view.getInt16(i * 4, true) / 32768;
+      r[i] = view.getInt16(i * 4 + 2, true) / 32768;
+    }
     if (nextAudioAt < ctx.currentTime) nextAudioAt = ctx.currentTime + 0.05;
     if (nextAudioAt - ctx.currentTime > 0.8) nextAudioAt = ctx.currentTime + 0.05; // resync
     var src = ctx.createBufferSource();

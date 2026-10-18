@@ -20,8 +20,10 @@ except Exception:      # pragma: no cover
     sc = None
     HAVE_SOUNDCARD = False
 
-OUT_RATE = 16000       # what the phone plays; plenty for speech and music
+OUT_RATE = 48000       # full CD-quality rate so music/speech both sound right
+OUT_CHANNELS = 2       # stereo
 CHUNK_MS = 100
+GAIN = 1.8             # loopback levels are often quiet; a little lift helps
 
 
 def _co_init():
@@ -35,20 +37,29 @@ def _co_init():
         return False
 
 
-def _to_s16(data, in_rate, gain=1.0):
-    """(n, ch) float in -1..1 -> 16 kHz mono int16 little-endian bytes."""
+def _to_s16(data, in_rate, gain=GAIN):
+    """(n, ch) float -> 48 kHz stereo int16 little-endian bytes."""
     arr = np.asarray(data, dtype=np.float32)
-    if arr.ndim > 1:
-        arr = arr.mean(axis=1)
-    if in_rate and in_rate != OUT_RATE and arr.size:
-        # Cheap linear resample - keeps latency low and CPU cheap.
-        n_out = max(1, int(arr.size * OUT_RATE / float(in_rate)))
-        x_old = np.linspace(0.0, 1.0, num=arr.size, endpoint=False)
+    if arr.ndim == 1:
+        arr = arr.reshape(-1, 1)
+
+    # stereo: take the first two channels, or duplicate a mono source
+    if arr.shape[1] >= 2:
+        out = arr[:, :2]
+    else:
+        out = np.repeat(arr[:, :1], 2, axis=1)
+
+    if in_rate and in_rate != OUT_RATE and out.shape[0]:
+        # Cheap linear resample per channel - low latency, low CPU.
+        n_out = max(1, int(out.shape[0] * OUT_RATE / float(in_rate)))
+        x_old = np.linspace(0.0, 1.0, num=out.shape[0], endpoint=False)
         x_new = np.linspace(0.0, 1.0, num=n_out, endpoint=False)
-        arr = np.interp(x_new, x_old, arr).astype(np.float32)
-    arr = np.clip(arr * gain, -1.0, 1.0)
+        out = np.stack([np.interp(x_new, x_old, out[:, c]) for c in range(2)],
+                       axis=1).astype(np.float32)
+
+    out = np.clip(out * gain, -1.0, 1.0)
     # float -1..1 must be scaled to the int16 range or it all truncates to zero
-    return (arr * 32767.0).astype("<i2").tobytes()
+    return (out * 32767.0).astype("<i2").tobytes()
 
 
 class LoopbackAudio:
