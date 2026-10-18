@@ -76,10 +76,10 @@ Agently is **not** code-signed (certificates cost money), so Windows may show a 
 
 ## SHA-256 checksums
 ```
-d0171e3e089400f927e42cc18496e45c68747ed2d893b2dc6542a4a21924b28e  Agently-Setup-Full.exe
-19a3341a7e5e1aa27ae73de81346506b8d468c25e7afbf6080c383fc293a1b2c  Agently-Setup-Lite.exe
-ed689b63a3058c6a71a49c8680625e177c3893e4b183cbc42667bc0004252092  Agently-Portable-Full.zip
-e6ed59022865c7e2a5ccc7b537e28dbb072b23a2d36fe0c18112c8e94c50a716  Agently-Portable-Lite.zip
+8056b68d240fd986acf81f70b6737a14ab52388c39f2eed23e3c055595289d3c  Agently-Setup-Full.exe
+24ff2f9e31fd7952d29d5ef1f01b96e9bfe1d973cdd7c8e0f215b747c17c94a2  Agently-Setup-Lite.exe
+6447e9ad69837dd72397f78d9a5e7817eaf1da58b3bd5ec40e42cf8950d96ff8  Agently-Portable-Full.zip
+289e128de739af0c7dc5105025ad83ff497eceff212a69f53ab4adbeb4107f8d  Agently-Portable-Lite.zip
 ```
 Verify on Windows: `certutil -hashfile Agently-Setup-Lite.exe SHA256`
 

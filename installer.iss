@@ -14,7 +14,7 @@
 [Setup]
 AppId={{6F0B6D5C-3F2A-4C7B-9E11-2D8A4C6B5E31}
 AppName=Agently
-AppVersion=1.0.0
+AppVersion=1.1.0
 AppPublisher=Agently
 DefaultDirName={localappdata}\Programs\Agently
 DisableProgramGroupPage=yes

@@ -15,12 +15,12 @@ VSVersionInfo(
         '040904B0',
         [StringStruct('CompanyName', 'Agently'),
          StringStruct('FileDescription', 'Agently Voice Agent'),
-         StringStruct('FileVersion', '1.0.0.0'),
+         StringStruct('FileVersion', '1.1.0.0'),
          StringStruct('InternalName', 'Agently'),
          StringStruct('LegalCopyright', 'Copyright (C) 2026 Agently'),
          StringStruct('OriginalFilename', 'Agently.exe'),
          StringStruct('ProductName', 'Agently'),
-         StringStruct('ProductVersion', '1.0.0.0')])
+         StringStruct('ProductVersion', '1.1.0.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
