@@ -546,6 +546,11 @@ class MainWindow(QMainWindow):
         port = self.cfg["Main"].get("remote_port", "8765")
         return f"http://{ip}:{port}"
 
+    def _remote_join_url(self):
+        """Auto-sign-in link: /j/<token> survives camera apps that drop ?query."""
+        tok = self.cfg["Main"].get("remote_token", "")
+        return f"{self._remote_url()}/j/{tok}"
+
     def _refresh_remote_labels(self):
         if not hasattr(self, "chk_remote"):
             return
@@ -556,7 +561,7 @@ class MainWindow(QMainWindow):
         tok = self.cfg["Main"].get("remote_token", "") or ""
         self.lbl_remote_token.setText(tok if tok else "(none yet - click New token)")
         if self.cfg["Main"].getboolean("remote_enabled", False) and tok:
-            self._draw_remote_qr(self._remote_url() + "?t=" + tok)
+            self._draw_remote_qr(self._remote_join_url())
         else:
             self.lbl_remote_qr.setPixmap(QPixmap())
             self.lbl_remote_qr.setText("—")
@@ -615,9 +620,8 @@ class MainWindow(QMainWindow):
             self.log("Copy failed - select and copy the text manually.")
 
     def _copy_remote_info(self):
-        tok = self.cfg["Main"].get("remote_token", "")
-        self._to_clipboard(f"{self._remote_url()}?t={tok}")
-        self.log("Sign-in link copied - paste it anywhere or send it to yourself.")
+        self._to_clipboard(self._remote_join_url())
+        self.log("Sign-in link copied - open it on your phone (no token needed).")
 
     def _start_remote(self, force=False):
         if not self.cfg["Main"].getboolean("remote_enabled", False) and not force:

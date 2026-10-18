@@ -110,14 +110,15 @@ PAGE_HTML = r"""<!doctype html>
 
 <script>
 (function () {
-  var TOKEN = localStorage.getItem("agently_token") || "";
-  // A scanned QR link may carry ?t=<token> to log straight in.
+  var TOKEN = window.__AGENTLY_TOKEN__ || localStorage.getItem("agently_token") || "";
+  // Fallback: a scanned QR link may carry ?t=<token> to log straight in.
   (function () {
     var m = /[?&]t=([^&]+)/.exec(location.search);
     if (m) {
-      try { TOKEN = decodeURIComponent(m[1]); localStorage.setItem("agently_token", TOKEN); } catch (e) {}
+      try { TOKEN = decodeURIComponent(m[1]); } catch (e) {}
       history.replaceState(null, "", location.pathname);
     }
+    if (TOKEN) { try { localStorage.setItem("agently_token", TOKEN); } catch (e) {} }
   })();
   var logEl = document.getElementById("log"), askEl = document.getElementById("ask");
   var askd = document.getElementById("askd"), statEl = document.getElementById("stat");

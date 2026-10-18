@@ -126,8 +126,44 @@ class RemoteHandler(BaseHTTPRequestHandler):
 
     def _authed(self):
         import hmac
+        if not self.token:
+            return False
         got = self.headers.get("X-Agently-Token", "") or ""
-        return bool(self.token) and hmac.compare_digest(got, self.token)
+        if got and hmac.compare_digest(got, self.token):
+            return True
+        # Also accept the cookie set by the /j/<token> join link.
+        cookie = self.headers.get("Cookie", "") or ""
+        for part in cookie.split(";"):
+            name, _, val = part.strip().partition("=")
+            if name == "agently_tok" and hmac.compare_digest(val, self.token):
+                return True
+        return False
+
+    def _cookie_token(self):
+        """Token carried by the join-link cookie, if valid."""
+        import hmac
+        cookie = self.headers.get("Cookie", "") or ""
+        for part in cookie.split(";"):
+            name, _, val = part.strip().partition("=")
+            if name == "agently_tok" and self.token and hmac.compare_digest(val, self.token):
+                return val
+        return ""
+
+    def _send_html(self, html, extra_headers=None):
+        if isinstance(html, str):
+            html = html.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(html)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (extra_headers or []):
+            self.send_header(k, v)
+        self.end_headers()
+        try:
+            self.wfile.write(html)
+        except Exception:
+            pass
 
     def _body(self):
         try:
@@ -150,8 +186,33 @@ class RemoteHandler(BaseHTTPRequestHandler):
     # ---------- routes ----------
     def do_GET(self):
         path = self.path.split("?")[0]
+
+        # Join link: /j/<token>  -> set the cookie and go to the app.
+        # (A path segment survives camera apps that strip ?query strings.)
+        if path.startswith("/j/") and len(path) > 3:
+            import hmac
+            tok = path[3:]
+            if self.token and hmac.compare_digest(tok, self.token):
+                self._touch()
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.send_header("Set-Cookie",
+                                 f"agently_tok={tok}; Path=/; Max-Age=31536000; SameSite=Lax")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            return self._json({"error": "bad token"}, 401)
+
         if path in ("/", "/index.html"):
-            return self._send(200, PAGE_HTML, "text/html; charset=utf-8")
+            tok = self._cookie_token()
+            html = PAGE_HTML
+            if tok:
+                # Hand the token straight to the page so it needs no typing.
+                html = html.replace(
+                    "<script>",
+                    f'<script>window.__AGENTLY_TOKEN__ = "{tok}";</script><script>', 1)
+            return self._send_html(html)
+
         if path == "/icon.png":
             return self._icon()
         if not self._authed():
