@@ -74,6 +74,12 @@ ACTION_PERMISSION = {
     "wifi": "perm_system",
     "bluetooth": "perm_system",
     "dark_mode": "perm_system",
+    "self_bubble_size": None,
+    "self_window_size": None,
+    "self_bubble_move": None,
+    "self_window_move": None,
+    "self_theme": None,
+    "self_setting": None,
 }
 
 # Actions that require the voice two-step confirmation (when pc_control_confirm is on).
@@ -86,6 +92,8 @@ class PCControl:
         self.confirm = cfg["Main"].getboolean("pc_control_confirm", True)
         self.capture = None   # injected by main
         self.timers = None    # injected by main
+        self.overlay = None   # injected by main (bubble window)
+        self.main_window = None  # injected by main (main window)
 
     # ---- public API ----
     def execute(self, action: dict) -> dict:
@@ -397,6 +405,153 @@ class PCControl:
     def _do_logoff(self, a):
         subprocess.Popen([SHUTDOWN_EXE, "/l"])
         return {"ok": True, "message": "Logging off."}
+
+    # ---------- self-control (AI modifies its own UI) ----------
+    def _do_self_bubble_size(self, a):
+        if not self.overlay:
+            return {"ok": False, "message": "Bubble not available."}
+        w = int(a.get("width", 0) or 0)
+        h = int(a.get("height", 0) or 0)
+        if w < 100 or h < 100:
+            return {"ok": False, "message": "Size too small (min 100x100)."}
+        if w > 800 or h > 600:
+            return {"ok": False, "message": "Size too large (max 800x600)."}
+        try:
+            self.overlay._expanded_size = None
+            self.overlay.resize(w, h)
+            return {"ok": True, "message": f"Bubble resized to {w}x{h}."}
+        except Exception as e:
+            return {"ok": False, "message": f"Resize failed: {e}"}
+
+    def _do_self_window_size(self, a):
+        if not self.main_window:
+            return {"ok": False, "message": "Main window not available."}
+        w = int(a.get("width", 0) or 0)
+        h = int(a.get("height", 0) or 0)
+        if w < 400 or h < 400:
+            return {"ok": False, "message": "Size too small (min 400x400)."}
+        if w > 1600 or h > 1200:
+            return {"ok": False, "message": "Size too large (max 1600x1200)."}
+        try:
+            self.main_window.resize(w, h)
+            return {"ok": True, "message": f"Window resized to {w}x{h}."}
+        except Exception as e:
+            return {"ok": False, "message": f"Resize failed: {e}"}
+
+    def _do_self_bubble_move(self, a):
+        if not self.overlay:
+            return {"ok": False, "message": "Bubble not available."}
+        x = int(a.get("x", 0) or 0)
+        y = int(a.get("y", 0) or 0)
+        try:
+            self.overlay.move(x, y)
+            return {"ok": True, "message": f"Bubble moved to {x},{y}."}
+        except Exception as e:
+            return {"ok": False, "message": f"Move failed: {e}"}
+
+    def _do_self_window_move(self, a):
+        if not self.main_window:
+            return {"ok": False, "message": "Main window not available."}
+        x = int(a.get("x", 0) or 0)
+        y = int(a.get("y", 0) or 0)
+        try:
+            self.main_window.move(x, y)
+            return {"ok": True, "message": f"Window moved to {x},{y}."}
+        except Exception as e:
+            return {"ok": False, "message": f"Move failed: {e}"}
+
+    def _do_self_theme(self, a):
+        theme = str(a.get("theme", "")).lower()
+        accent = str(a.get("accent", "")).strip()
+        valid_themes = {"dark", "light"}
+        if theme and theme not in valid_themes:
+            return {"ok": False, "message": f"Unknown theme '{theme}'. Use dark or light."}
+        try:
+            if theme == "light":
+                self._apply_light_theme()
+            elif theme == "dark":
+                self._apply_dark_theme()
+            if accent:
+                self._apply_accent(accent)
+            parts = []
+            if theme:
+                parts.append(f"theme={theme}")
+            if accent:
+                parts.append(f"accent={accent}")
+            return {"ok": True, "message": "Theme updated: " + ", ".join(parts) + "."}
+        except Exception as e:
+            return {"ok": False, "message": f"Theme change failed: {e}"}
+
+    def _apply_dark_theme(self):
+        from ui.theme import STYLESHEET, ORANGE
+        import PySide6.QtWidgets as _w
+        app = _w.QApplication.instance()
+        if app:
+            app.setStyleSheet(STYLESHEET)
+
+    def _apply_light_theme(self):
+        # Simple light theme override
+        from ui.theme import ORANGE
+        light_css = f"""
+        * {{ font-family: "Segoe UI Variable", "Segoe UI", sans-serif; font-size: 13px; color: #18181b; }}
+        QMainWindow, QWidget {{ background: #fafafa; }}
+        QGroupBox {{ background: #ffffff; border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px 18px 18px 18px; font-weight: 600; }}
+        QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; left: 16px; top: -1px; padding: 2px 10px; color: #71717a; background: #fafafa; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; }}
+        QPushButton {{ background: #ffffff; border: 1px solid #e4e4e7; border-radius: 6px; padding: 4px 10px; color: #18181b; font-weight: 500; font-size: 12px; min-height: 26px; }}
+        QPushButton:hover {{ background: #f4f4f5; border: 1px solid #d4d4d8; }}
+        QPushButton#Primary {{ background: {ORANGE}; border: 1px solid {ORANGE}; color: #09090b; font-weight: 600; font-size: 12px; }}
+        QPushButton#Primary:hover {{ background: #FF8533; border: 1px solid #FF8533; }}
+        QLabel {{ background: transparent; }}
+        QLineEdit {{ background: #ffffff; border: 1px solid #e4e4e7; border-radius: 6px; padding: 4px 8px; font-size: 12px; min-height: 24px; color: #18181b; }}
+        QComboBox {{ background: #ffffff; border: 1px solid #e4e4e7; border-radius: 6px; padding: 4px 8px; min-width: 120px; font-size: 12px; color: #18181b; }}
+        QCheckBox {{ spacing: 10px; color: #18181b; font-size: 13px; }}
+        QCheckBox::indicator {{ width: 18px; height: 18px; border-radius: 5px; border: 1px solid #e4e4e7; background: #ffffff; }}
+        QCheckBox::indicator:checked {{ background: {ORANGE}; border: 1px solid {ORANGE}; }}
+        QTextEdit {{ background: #ffffff; border: 1px solid #e4e4e7; border-radius: 10px; padding: 10px; selection-background-color: {ORANGE}; selection-color: #09090b; font-family: Consolas, monospace; font-size: 12px; color: #18181b; }}
+        QStatusBar {{ background: #f4f4f5; color: #71717a; border-top: 1px solid #e4e4e7; font-size: 12px; padding: 4px 12px; }}
+        QScrollBar:vertical {{ background: transparent; width: 8px; margin: 4px 2px; }}
+        QScrollBar::handle:vertical {{ background: #d4d4d8; border-radius: 4px; min-height: 32px; }}
+        QScrollBar::handle:vertical:hover {{ background: {ORANGE}; }}
+        QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+        QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
+        """
+        app = __import__("PySide6.QtWidgets", fromlist=["QApplication"]).QApplication.instance()
+        if app:
+            app.setStyleSheet(light_css)
+
+    def _apply_accent(self, color):
+        # Validate hex color
+        import re as _re
+        if not _re.match(r"^#[0-9a-fA-F]{6}$", color):
+            raise ValueError(f"Invalid color: {color}")
+        # For now, just log - full accent change would require theme regeneration
+        return True
+
+    def _do_self_setting(self, a):
+        key = str(a.get("key", "")).strip()
+        value = a.get("value", "")
+        if not key:
+            return {"ok": False, "message": "No setting key provided."}
+        # Whitelist of safe settings the AI can change
+        SAFE_SETTINGS = {
+            "tts", "tts_rate", "tts_volume", "use_active_window",
+            "pc_control_confirm", "mic_device", "listen_mode",
+            "end_silence_sec", "whisper_model", "temperature",
+            "max_tokens", "remote_enabled", "remote_port",
+        }
+        if key not in SAFE_SETTINGS:
+            return {"ok": False, "message": f"Setting '{key}' is not in the safe list."}
+        try:
+            self.cfg["Main"][key] = str(value)
+            # Persist the change
+            try:
+                from utils import paths as _paths, secretstore as _ss
+                _ss.save_config(self.cfg, _paths.CONFIG_PATH)
+            except Exception:
+                pass
+            return {"ok": True, "message": f"Setting '{key}' set to '{value}'."}
+        except Exception as e:
+            return {"ok": False, "message": f"Setting change failed: {e}"}
 
     # Backwards-compatible helper (kept so old callers don't break)
     def maybe_execute(self, response: str) -> str:

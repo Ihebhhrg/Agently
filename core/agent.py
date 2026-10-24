@@ -27,6 +27,9 @@ SYSTEM = (
     "You CAN control this computer: open and close apps, manage windows, work with files and "
     "folders, use the clipboard, take screenshots, set timers and reminders, change system "
     "settings, run commands, and control power (shut down, restart, sleep, log off). "
+    "You can also modify your own interface: resize or move the chat bubble and the main "
+    "window, switch between dark and light themes, change the accent color, and change any "
+    "allowed setting (tts, mic device, volume, etc.). "
     "Never tell the user you lack permission - just do what they asked. If something is truly "
     "impossible, briefly say what you can do instead. "
     "You ALWAYS reply with a single JSON object. Never write anything before or after the JSON."
@@ -69,9 +72,15 @@ User: set brightness to 50                      -> {"action":"brightness","level
 User: turn off wifi                             -> {"action":"wifi","on":false}
 User: turn on bluetooth                         -> {"action":"bluetooth","on":true}
 User: enable dark mode                          -> {"action":"dark_mode","on":true}
+User: make the bubble bigger                  -> {"action":"self_bubble_size","width":480,"height":360}
+User: make the window smaller                -> {"action":"self_window_size","width":600,"height":700}
+User: move the bubble to the top right       -> {"action":"self_bubble_move","x":1200,"y":50}
+User: switch to light theme                  -> {"action":"self_theme","theme":"light"}
+User: change the accent color to blue         -> {"action":"self_theme","accent":"#3b82f6"}
+User: turn on voice replies                  -> {"action":"self_setting","key":"tts","value":"true"}
 
 FIELD RULES:
-- "action" must be one of: chat, open, search, type, key, hotkey, click, move, scroll, volume, media, window, lock, close_app, focus_app, show_desktop, list_windows, open_path, mkdir, move_file, copy, delete, clip_get, clip_set, screenshot, timer, reminder, cancel_timers, list_timers, shutdown, restart, sleep, logoff, run, brightness, wifi, bluetooth, dark_mode.
+- "action" must be one of: chat, open, search, type, key, hotkey, click, move, scroll, volume, media, window, lock, close_app, focus_app, show_desktop, list_windows, open_path, mkdir, move_file, copy, delete, clip_get, clip_set, screenshot, timer, reminder, cancel_timers, list_timers, shutdown, restart, sleep, logoff, run, brightness, wifi, bluetooth, dark_mode, self_bubble_size, self_window_size, self_bubble_move, self_window_move, self_theme, self_setting.
 - Use "chat" whenever the user is only talking or asking something (not asking you to control the PC).
 - "volume" level is one of: up, down, mute.
 - "window" do is one of: minimize, maximize, close, switch.
@@ -88,7 +97,9 @@ _VALID = {"chat", "open", "search", "type", "key", "hotkey", "click",
           "clip_get", "clip_set", "screenshot",
           "timer", "reminder", "cancel_timers", "list_timers",
           "shutdown", "restart", "sleep", "logoff", "run",
-          "brightness", "wifi", "bluetooth", "dark_mode"}
+          "brightness", "wifi", "bluetooth", "dark_mode",
+          "self_bubble_size", "self_window_size", "self_bubble_move",
+          "self_window_move", "self_theme", "self_setting"}
 
 
 def _extract_json(text: str):
