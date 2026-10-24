@@ -266,8 +266,6 @@ class VoiceOverlay(QWidget):
         self._expanded_pos = None
         self.setStyleSheet(BUBBLE_STYLESHEET)
 
-        self._add_bot("I'm listening. Just talk to me — or type below.")
-
     # ---------- collapse / expand ----------
     ANIM_MS = 220
 
