@@ -237,10 +237,10 @@ class MainWindow(QMainWindow):
         sform.addRow("Speech-to-text:", self.lbl_whisper)
         container_layout.addWidget(sb)
 
-        # ---------- actions card ----------
+        # action buttons
         ab = QGroupBox("Actions")
         arow = QHBoxLayout(ab)
-        arow.setSpacing(8)
+        arow.setSpacing(6)
         b_mute = QPushButton("🎤  Talk / Stop")
         b_mute.setObjectName("Primary")
         b_mute.clicked.connect(self.overlay.toggle_talk)

@@ -176,8 +176,8 @@ class VoiceOverlay(QWidget):
         self.card = QWidget(self)
         self.card.setObjectName("BubbleCard")
         card_lay = QVBoxLayout(self.card)
-        card_lay.setContentsMargins(12, 10, 12, 12)
-        card_lay.setSpacing(8)
+        card_lay.setContentsMargins(12, 8, 12, 10)
+        card_lay.setSpacing(6)
 
         # header
         header = QHBoxLayout()
@@ -190,16 +190,10 @@ class VoiceOverlay(QWidget):
         header.addStretch(1)
         self.btn_min = QPushButton("–")
         self.btn_min.setObjectName("IconBtn")
-        self.btn_min.setFixedSize(22, 22)
+        self.btn_min.setFixedSize(20, 20)
         self.btn_min.setToolTip("Minimize to a small button")
         self.btn_min.clicked.connect(self.collapse)
         header.addWidget(self.btn_min)
-        self.btn_clear = QPushButton("✕")
-        self.btn_clear.setObjectName("IconBtn")
-        self.btn_clear.setFixedSize(22, 22)
-        self.btn_clear.setToolTip("Clear chat")
-        self.btn_clear.clicked.connect(self._clear)
-        header.addWidget(self.btn_clear)
         card_lay.addLayout(header)
 
         # chat scroll

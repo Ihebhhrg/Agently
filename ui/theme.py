@@ -43,7 +43,7 @@ QGroupBox {{
     border: 1px solid {BORDER};
     border-radius: 12px;
     margin-top: 0px;
-    padding: 18px 20px 20px 20px;
+    padding: 16px 18px 18px 18px;
     font-weight: 600;
 }}
 QGroupBox::title {{
@@ -65,12 +65,12 @@ QGroupBox::title {{
 QPushButton {{
     background: {CARD};
     border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 8px 16px;
+    border-radius: 6px;
+    padding: 4px 10px;
     color: {TEXT};
-    font-weight: 600;
-    font-size: 13px;
-    min-height: 32px;
+    font-weight: 500;
+    font-size: 12px;
+    min-height: 26px;
 }}
 QPushButton:hover {{
     background: #27272a;
@@ -84,7 +84,8 @@ QPushButton#Primary {{
     background: {ORANGE};
     border: 1px solid {ORANGE};
     color: #09090b;
-    font-weight: 700;
+    font-weight: 600;
+    font-size: 12px;
 }}
 QPushButton#Primary:hover {{
     background: {ORANGE_LIGHT};
@@ -99,7 +100,8 @@ QPushButton#Danger {{
     background: {DANGER};
     border: 1px solid {DANGER};
     color: #ffffff;
-    font-weight: 700;
+    font-weight: 600;
+    font-size: 12px;
 }}
 QPushButton#Danger:hover {{
     background: #dc2626;
@@ -110,18 +112,18 @@ QPushButton#Danger:hover {{
 QComboBox {{
     background: {CARD};
     border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 7px 12px;
-    min-width: 140px;
-    font-size: 13px;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-width: 120px;
+    font-size: 12px;
 }}
 QComboBox:hover {{ border: 1px solid #3f3f46; }}
 QComboBox:focus {{ border: 1px solid {ORANGE}; }}
-QComboBox::drop-down {{ border: none; width: 24px; }}
+QComboBox::drop-down {{ border: none; width: 20px; }}
 QComboBox QAbstractItemView {{
     background: {PANEL};
     border: 1px solid {BORDER};
-    border-radius: 8px;
+    border-radius: 6px;
     selection-background-color: {ORANGE};
     selection-color: #09090b;
     outline: none;
@@ -131,10 +133,10 @@ QComboBox QAbstractItemView {{
 QLineEdit {{
     background: {CARD};
     border: 1px solid {BORDER};
-    border-radius: 8px;
-    padding: 7px 12px;
-    font-size: 13px;
-    min-height: 32px;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    min-height: 24px;
 }}
 QLineEdit:hover {{ border: 1px solid #3f3f46; }}
 QLineEdit:focus {{ border: 1px solid {ORANGE}; }}
@@ -277,7 +279,7 @@ BUBBLE_STYLESHEET = f"""
 
 QWidget#BubbleCard {{
     background: rgba(14, 14, 14, 0.97);
-    border: 1px solid {BORDER};
+    border: 1px solid #27272a;
     border-radius: 16px;
 }}
 
@@ -298,8 +300,8 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QLabel#UserBubble {{
     background: {ORANGE};
     color: #09090b;
-    border-radius: 12px;
-    padding: 8px 12px;
+    border-radius: 14px;
+    padding: 7px 12px;
     font-weight: 600;
     font-size: 12px;
 }}
@@ -307,8 +309,8 @@ QLabel#BotBubble {{
     background: {CARD};
     color: {TEXT};
     border: 1px solid {BORDER};
-    border-radius: 12px;
-    padding: 8px 12px;
+    border-radius: 14px;
+    padding: 7px 12px;
     font-size: 12px;
 }}
 
@@ -316,9 +318,9 @@ QPushButton#IconBtn {{
     background: {ORANGE};
     border: 1px solid {ORANGE};
     color: #09090b;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 800;
-    border-radius: 6px;
+    border-radius: 5px;
     padding: 0px;
 }}
 QPushButton#IconBtn:hover {{ background: {ORANGE_LIGHT}; color: #09090b; }}
