@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
+        scroll.setAlignment(Qt.AlignTop)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea { background: transparent; } "
@@ -508,16 +508,23 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
     def resizeEvent(self, e):
-        # Keep the settings readable on wide monitors instead of stretching
-        # one giant column across 2000px.
+        # Only update the scroll area width when the window is actually resized,
+        # not during scrolling. Avoids spurious layout changes.
         super().resizeEvent(e)
+        if getattr(self, "_resize_timer", None) is None:
+            self._resize_timer = QTimer(self)
+            self._resize_timer.setSingleShot(True)
+            self._resize_timer.timeout.connect(self._apply_resize)
+        self._resize_timer.start(150)
+
+    def _apply_resize(self):
         try:
-            w = max(520, min(e.size().width() - 24, 980))
-            self.findChild(QScrollArea).setMaximumWidth(w + 24)
+            sa = self.findChild(QScrollArea)
+            if sa is not None:
+                w = max(520, min(self.width() - 24, 980))
+                sa.setMaximumWidth(w + 24)
         except Exception:
             pass
-
-    # ---------- helpers ----------
     def log(self, msg):
         self.log_box.moveCursor(QTextCursor.MoveOperation.End)
         self.log_box.insertPlainText(msg.rstrip() + "\n")
