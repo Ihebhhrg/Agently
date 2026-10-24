@@ -37,7 +37,7 @@ class Bubble(QLabel):
         self.setWordWrap(True)
         self.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.setObjectName("UserBubble" if who == "user" else "BotBubble")
-        self.setMaximumWidth(260)
+        self.setMaximumWidth(280)
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
 
 
@@ -91,7 +91,7 @@ class VoiceOverlay(QWidget):
         self.setWindowTitle("Agently")
         self.setWindowIcon(QIcon(paths.resource_path("app.ico")))
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.resize(340, 260)
+        self.resize(420, 320)
         self.move(60, 60)
 
         self._drag_pos = None
@@ -338,7 +338,7 @@ class VoiceOverlay(QWidget):
         self.card.show()
         self.card.updateGeometry()
         self.layout().activate()
-        size = self._expanded_size or QSize(340, 260)
+        size = self._expanded_size or QSize(420, 320)
         if self._expanded_pos is not None:
             self.move(self._expanded_pos)
         self.show()
