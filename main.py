@@ -173,9 +173,7 @@ class MainWindow(QMainWindow):
 
     # ---------- UI ----------
     def _build_ui(self):
-        # Everything lives in a scroll area so the window never squashes the
-        # controls when the content is taller than the window (small screens,
-        # high DPI scaling, or long provider/model names).
+        # Outer container with centered content
         outer = QWidget()
         outer_root = QVBoxLayout(outer)
         outer_root.setContentsMargins(0, 0, 0, 0)
@@ -183,7 +181,7 @@ class MainWindow(QMainWindow):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setAlignment(Qt.AlignTop)
+        scroll.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setStyleSheet("QScrollArea { background: transparent; } "
@@ -194,20 +192,39 @@ class MainWindow(QMainWindow):
         outer_root.addWidget(scroll)
 
         root = QVBoxLayout(central)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # header
-        head = QLabel("🎙  Agently")
+        # Inner container with max width
+        container = QWidget()
+        container.setMaximumWidth(720)
+        container.setMinimumWidth(520)
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(24, 24, 24, 24)
+        container_layout.setSpacing(16)
+
+        root.addWidget(container, alignment=Qt.AlignHCenter)
+
+        # ---------- header ----------
+        header = QWidget()
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 16)
+        header_layout.setSpacing(4)
+
+        head = QLabel("Agently")
         head.setObjectName("Header")
-        root.addWidget(head)
+        header_layout.addWidget(head)
+
         sub = QLabel("Voice agent · smart cloud model · private on-device speech")
         sub.setObjectName("Sub")
-        root.addWidget(sub)
+        header_layout.addWidget(sub)
 
-        # status box
+        container_layout.addWidget(header)
+
+        # ---------- status card ----------
         sb = QGroupBox("Status")
         sform = QFormLayout(sb)
+        sform.setSpacing(8)
         self.lbl_model = QLabel("?")
         self.lbl_ollama = QLabel("checking...")
         self.lbl_hotkey = QLabel(self.cfg["Main"].get("hotkey", "?"))
@@ -215,14 +232,15 @@ class MainWindow(QMainWindow):
         self.lbl_whisper = QLabel("loading...")
         sform.addRow("Model:", self.lbl_model)
         sform.addRow("Provider:", self.lbl_ollama)
-        sform.addRow("Voice hotkey (talk):", self.lbl_hotkey)
+        sform.addRow("Voice hotkey:", self.lbl_hotkey)
         sform.addRow("Microphone:", self.lbl_mic)
         sform.addRow("Speech-to-text:", self.lbl_whisper)
-        root.addWidget(sb)
+        container_layout.addWidget(sb)
 
-        # action buttons
+        # ---------- actions card ----------
         ab = QGroupBox("Actions")
         arow = QHBoxLayout(ab)
+        arow.setSpacing(8)
         b_mute = QPushButton("🎤  Talk / Stop")
         b_mute.setObjectName("Primary")
         b_mute.clicked.connect(self.overlay.toggle_talk)
@@ -236,22 +254,23 @@ class MainWindow(QMainWindow):
         b_clear.clicked.connect(self._clear_log)
         for b in (b_mute, b_bubble, b_trans, b_screen, b_clear):
             arow.addWidget(b)
-        root.addWidget(ab)
+        container_layout.addWidget(ab)
 
-        # log
+        # ---------- activity log ----------
         lb = QGroupBox("Activity log")
         llay = QVBoxLayout(lb)
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setFont(QFont("Consolas", 9))
-        self.log_box.setMinimumHeight(120)
-        self.log_box.setMaximumHeight(200)
+        self.log_box.setMinimumHeight(100)
+        self.log_box.setMaximumHeight(180)
         llay.addWidget(self.log_box)
-        root.addWidget(lb, stretch=0)
+        container_layout.addWidget(lb)
 
-        # settings
+        # ---------- settings card ----------
         setb = QGroupBox("Settings")
         srow = QHBoxLayout(setb)
+        srow.setSpacing(8)
         srow.addWidget(QLabel("Hotkey:"))
         self.cmb_hotkey = QComboBox()
         self.cmb_hotkey.addItems([
@@ -262,7 +281,7 @@ class MainWindow(QMainWindow):
         self.cmb_hotkey.currentTextChanged.connect(self._change_hotkey)
         srow.addWidget(self.cmb_hotkey)
 
-        self.chk_active = QCheckBox("Use active window (else full screen)")
+        self.chk_active = QCheckBox("Use active window")
         self.chk_active.setChecked(self.cfg["Main"].getboolean("use_active_window", True))
         self.chk_active.stateChanged.connect(self._save_active)
         srow.addWidget(self.chk_active)
@@ -272,11 +291,12 @@ class MainWindow(QMainWindow):
         self.chk_tts.stateChanged.connect(self._save_tts)
         srow.addWidget(self.chk_tts)
         srow.addStretch(1)
-        root.addWidget(setb)
+        container_layout.addWidget(setb)
 
-        # microphone settings
+        # ---------- microphone card ----------
         mb = QGroupBox("Microphone")
         mform = QFormLayout(mb)
+        mform.setSpacing(8)
         self.cmb_mic = QComboBox()
         self._populate_mics()
         self.cmb_mic.currentIndexChanged.connect(self._change_mic)
@@ -305,11 +325,12 @@ class MainWindow(QMainWindow):
         mrow.addWidget(b_micset)
         mrow.addWidget(b_restart)
         mform.addRow(mrow)
-        root.addWidget(mb)
+        container_layout.addWidget(mb)
 
-        # brain (AI model) settings
+        # ---------- brain (AI model) card ----------
         bb = QGroupBox("Brain — AI model")
         bform = QFormLayout(bb)
+        bform.setSpacing(8)
         self.cmb_provider = QComboBox()
         for pid in providers.PROVIDER_ORDER:
             self.cmb_provider.addItem(providers.get(pid)["label"], pid)
@@ -347,7 +368,7 @@ class MainWindow(QMainWindow):
         bform.addRow("Question model:", self.cmb_chat_pick)
 
         self.lbl_chat_now = QLabel("")
-        self.lbl_chat_now.setStyleSheet("color: #9A9A9A;")
+        self.lbl_chat_now.setStyleSheet("color: #a1a1aa;")
         bform.addRow("", self.lbl_chat_now)
 
         brow = QHBoxLayout()
@@ -363,15 +384,15 @@ class MainWindow(QMainWindow):
         brow.addWidget(b_clear)
         brow.addStretch(1)
         bform.addRow(brow)
-        root.addWidget(bb)
+        container_layout.addWidget(bb)
 
         self._load_provider_fields(cur_prov, initial=True)
         self._refresh_chat_label()
 
-        # permissions
+        # ---------- permissions card ----------
         permb = QGroupBox("Permissions — what Agently may do")
         pgrid = QGridLayout(permb)
-        pgrid.setSpacing(4)
+        pgrid.setSpacing(8)
         self._perm_boxes = {}
         perm_defs = [
             ("perm_apps", "Apps & windows", "Close, focus, list open windows"),
@@ -396,11 +417,12 @@ class MainWindow(QMainWindow):
         confirm_row.addWidget(self.chk_confirm)
         confirm_row.addStretch(1)
         pgrid.addLayout(confirm_row, len(perm_defs) // 2 + 1, 0, 1, 2)
-        root.addWidget(permb)
+        container_layout.addWidget(permb)
 
-        # remote (control from your phone over Tailscale)
+        # ---------- remote (control from your phone over Tailscale) card ----------
         rb = QGroupBox("Remote — control from your phone (Tailscale)")
         rform = QFormLayout(rb)
+        rform.setSpacing(8)
         self.chk_remote = QCheckBox("Enable remote access")
         self.chk_remote.setChecked(self.cfg["Main"].getboolean("remote_enabled", False))
         self.chk_remote.stateChanged.connect(self._toggle_remote)
@@ -471,13 +493,20 @@ class MainWindow(QMainWindow):
         )
         rnote.setWordWrap(True)
         rform.addRow(rnote)
-        root.addWidget(rb)
+        container_layout.addWidget(rb)
 
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Ready")
 
         self.setCentralWidget(outer)
 
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        try:
+            w = max(520, min(e.size().width() - 24, 980))
+            self.findChild(QScrollArea).setMaximumWidth(w + 24)
+        except Exception:
+            pass
     def resizeEvent(self, e):
         # Keep the settings readable on wide monitors instead of stretching
         # one giant column across 2000px.
