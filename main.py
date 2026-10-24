@@ -11,7 +11,7 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTextEdit, QComboBox, QCheckBox, QGroupBox, QFormLayout, QStatusBar,
-    QLineEdit, QMessageBox, QGridLayout, QScrollArea, QFrame
+    QLineEdit, QMessageBox, QGridLayout, QScrollArea, QFrame, QStackedWidget
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QTextCursor, QIcon, QPixmap
@@ -173,55 +173,153 @@ class MainWindow(QMainWindow):
 
     # ---------- UI ----------
     def _build_ui(self):
-        # Outer container with centered content
+        # ---------- outer shell: sidebar + content ----------
         outer = QWidget()
-        outer_root = QVBoxLayout(outer)
+        outer_root = QHBoxLayout(outer)
         outer_root.setContentsMargins(0, 0, 0, 0)
         outer_root.setSpacing(0)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setAlignment(Qt.AlignTop)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { background: transparent; } "
-                             "QScrollArea > QWidget > QWidget { background: transparent; }")
+        # ---------- sidebar ----------
+        sidebar = QWidget()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(200)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(12, 16, 12, 16)
+        sidebar_layout.setSpacing(2)
 
-        central = QWidget()
-        scroll.setWidget(central)
-        outer_root.addWidget(scroll)
+        # App title in sidebar
+        title = QLabel("Agently")
+        title.setObjectName("SidebarTitle")
+        sidebar_layout.addWidget(title)
 
-        root = QVBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        sub = QLabel("Voice Agent")
+        sub.setObjectName("SidebarSub")
+        sidebar_layout.addWidget(sub)
 
-        # Inner container with max width
-        container = QWidget()
-        container.setMaximumWidth(720)
-        container.setMinimumWidth(520)
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(24, 24, 24, 24)
-        container_layout.setSpacing(16)
+        sidebar_layout.addSpacing(12)
 
-        root.addWidget(container, alignment=Qt.AlignHCenter)
+        # Navigation buttons
+        self._nav_buttons = []
+        nav_items = [
+            ("Status", "status"),
+            ("Actions", "actions"),
+            ("Microphone", "mic"),
+            ("Brain", "brain"),
+            ("Permissions", "perms"),
+            ("Remote", "remote"),
+            ("Activity Log", "log"),
+        ]
 
-        # ---------- header ----------
-        header = QWidget()
-        header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 16)
-        header_layout.setSpacing(4)
+        self._nav_map = {}
+        for label, key in nav_items:
+            btn = QPushButton(label)
+            btn.setObjectName("NavBtn")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda checked, k=key: self._switch_section(k))
+            sidebar_layout.addWidget(btn)
+            self._nav_buttons.append((key, btn))
+            self._nav_map[key] = btn
 
-        head = QLabel("Agently")
-        head.setObjectName("Header")
-        header_layout.addWidget(head)
+        sidebar_layout.addStretch(1)
 
-        sub = QLabel("Voice agent · smart cloud model · private on-device speech")
-        sub.setObjectName("Sub")
-        header_layout.addWidget(sub)
+        # Footer in sidebar
+        footer = QLabel("v1.1.0")
+        footer.setObjectName("SidebarFooter")
+        sidebar_layout.addWidget(footer)
 
-        container_layout.addWidget(header)
+        outer_root.addWidget(sidebar)
 
-        # ---------- status card ----------
+        # ---------- content area ----------
+        content_area = QWidget()
+        content_layout = QVBoxLayout(content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        # Top bar
+        topbar = QWidget()
+        topbar.setObjectName("TopBar")
+        topbar_layout = QHBoxLayout(topbar)
+        topbar_layout.setContentsMargins(20, 12, 20, 12)
+        topbar_layout.setSpacing(8)
+
+        self._section_title = QLabel("Status")
+        self._section_title.setObjectName("SectionTitle")
+        topbar_layout.addWidget(self._section_title)
+        topbar_layout.addStretch(1)
+
+        self._status_pill = QLabel("Ready")
+        self._status_pill.setObjectName("StatusPill")
+        topbar_layout.addWidget(self._status_pill)
+
+        content_layout.addWidget(topbar)
+
+        # Stacked pages
+        self._stack = QStackedWidget()
+        content_layout.addWidget(self._stack, stretch=1)
+
+        outer_root.addWidget(content_area, stretch=1)
+
+        # ---------- Build each section page ----------
+        # Status page
+        status_page = self._build_status_page()
+        self._stack.addWidget(status_page)
+        self._pages = {"status": 0}
+
+        # Actions page
+        actions_page = self._build_actions_page()
+        self._stack.addWidget(actions_page)
+        self._pages["actions"] = 1
+
+        # Microphone page
+        mic_page = self._build_mic_page()
+        self._stack.addWidget(mic_page)
+        self._pages["mic"] = 2
+
+        # Brain page
+        brain_page = self._build_brain_page()
+        self._stack.addWidget(brain_page)
+        self._pages["brain"] = 3
+
+        # Permissions page
+        perms_page = self._build_perms_page()
+        self._stack.addWidget(perms_page)
+        self._pages["perms"] = 4
+
+        # Remote page
+        remote_page = self._build_remote_page()
+        self._stack.addWidget(remote_page)
+        self._pages["remote"] = 5
+
+        # Log page
+        log_page = self._build_log_page()
+        self._stack.addWidget(log_page)
+        self._pages["log"] = 6
+
+        self.setCentralWidget(outer)
+
+        # Select first nav item
+        self._nav_map["status"].setChecked(True)
+        self._switch_section("status")
+
+    def _switch_section(self, key):
+        if key in self._pages:
+            self._stack.setCurrentIndex(self._pages[key])
+        titles = {
+            "status": "Status", "actions": "Actions", "mic": "Microphone",
+            "brain": "Brain", "perms": "Permissions", "remote": "Remote",
+            "log": "Activity Log",
+        }
+        self._section_title.setText(titles.get(key, key.title()))
+        for k, btn in self._nav_buttons:
+            btn.setChecked(k == key)
+
+    def _build_status_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
+
         sb = QGroupBox("Status")
         sform = QFormLayout(sb)
         sform.setSpacing(8)
@@ -235,9 +333,16 @@ class MainWindow(QMainWindow):
         sform.addRow("Voice hotkey:", self.lbl_hotkey)
         sform.addRow("Microphone:", self.lbl_mic)
         sform.addRow("Speech-to-text:", self.lbl_whisper)
-        container_layout.addWidget(sb)
+        lay.addWidget(sb)
+        lay.addStretch(1)
+        return page
 
-        # action buttons
+    def _build_actions_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
+
         ab = QGroupBox("Actions")
         arow = QHBoxLayout(ab)
         arow.setSpacing(6)
@@ -254,46 +359,16 @@ class MainWindow(QMainWindow):
         b_clear.clicked.connect(self._clear_log)
         for b in (b_mute, b_bubble, b_trans, b_screen, b_clear):
             arow.addWidget(b)
-        container_layout.addWidget(ab)
+        lay.addWidget(ab)
+        lay.addStretch(1)
+        return page
 
-        # ---------- activity log ----------
-        lb = QGroupBox("Activity log")
-        llay = QVBoxLayout(lb)
-        self.log_box = QTextEdit()
-        self.log_box.setReadOnly(True)
-        self.log_box.setFont(QFont("Consolas", 9))
-        self.log_box.setMinimumHeight(100)
-        self.log_box.setMaximumHeight(180)
-        llay.addWidget(self.log_box)
-        container_layout.addWidget(lb)
+    def _build_mic_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
 
-        # ---------- settings card ----------
-        setb = QGroupBox("Settings")
-        srow = QHBoxLayout(setb)
-        srow.setSpacing(8)
-        srow.addWidget(QLabel("Hotkey:"))
-        self.cmb_hotkey = QComboBox()
-        self.cmb_hotkey.addItems([
-            "Alt+Shift+V", "Ctrl+Shift+V", "Alt+Space",
-            "Ctrl+Alt+V", "F9", "F10"
-        ])
-        self.cmb_hotkey.setCurrentText(self.cfg["Main"].get("hotkey", "Alt+Shift+V"))
-        self.cmb_hotkey.currentTextChanged.connect(self._change_hotkey)
-        srow.addWidget(self.cmb_hotkey)
-
-        self.chk_active = QCheckBox("Use active window")
-        self.chk_active.setChecked(self.cfg["Main"].getboolean("use_active_window", True))
-        self.chk_active.stateChanged.connect(self._save_active)
-        srow.addWidget(self.chk_active)
-
-        self.chk_tts = QCheckBox("Voice replies (TTS)")
-        self.chk_tts.setChecked(self.cfg["Main"].getboolean("tts", True))
-        self.chk_tts.stateChanged.connect(self._save_tts)
-        srow.addWidget(self.chk_tts)
-        srow.addStretch(1)
-        container_layout.addWidget(setb)
-
-        # ---------- microphone card ----------
         mb = QGroupBox("Microphone")
         mform = QFormLayout(mb)
         mform.setSpacing(8)
@@ -325,9 +400,16 @@ class MainWindow(QMainWindow):
         mrow.addWidget(b_micset)
         mrow.addWidget(b_restart)
         mform.addRow(mrow)
-        container_layout.addWidget(mb)
+        lay.addWidget(mb)
+        lay.addStretch(1)
+        return page
 
-        # ---------- brain (AI model) card ----------
+    def _build_brain_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
+
         bb = QGroupBox("Brain — AI model")
         bform = QFormLayout(bb)
         bform.setSpacing(8)
@@ -348,7 +430,6 @@ class MainWindow(QMainWindow):
         self.cmb_cloud_model.setEditable(True)
         bform.addRow("Model:", self.cmb_cloud_model)
 
-        # Which model answers general questions (routing).
         self.cmb_chat_model = QComboBox()
         for label, val in (("Auto (smartest available)", "auto"),
                            ("Same as commands", "same"),
@@ -384,12 +465,19 @@ class MainWindow(QMainWindow):
         brow.addWidget(b_clear)
         brow.addStretch(1)
         bform.addRow(brow)
-        container_layout.addWidget(bb)
+        lay.addWidget(bb)
 
         self._load_provider_fields(cur_prov, initial=True)
         self._refresh_chat_label()
+        lay.addStretch(1)
+        return page
 
-        # ---------- permissions card ----------
+    def _build_perms_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
+
         permb = QGroupBox("Permissions — what Agently may do")
         pgrid = QGridLayout(permb)
         pgrid.setSpacing(8)
@@ -417,9 +505,16 @@ class MainWindow(QMainWindow):
         confirm_row.addWidget(self.chk_confirm)
         confirm_row.addStretch(1)
         pgrid.addLayout(confirm_row, len(perm_defs) // 2 + 1, 0, 1, 2)
-        container_layout.addWidget(permb)
+        lay.addWidget(permb)
+        lay.addStretch(1)
+        return page
 
-        # ---------- remote (control from your phone over Tailscale) card ----------
+    def _build_remote_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
+
         rb = QGroupBox("Remote — control from your phone (Tailscale)")
         rform = QFormLayout(rb)
         rform.setSpacing(8)
@@ -433,7 +528,6 @@ class MainWindow(QMainWindow):
         self.lbl_remote_url.setWordWrap(True)
         rform.addRow("Open on your phone:", self.lbl_remote_url)
 
-        # QR code: scan with the phone camera to open + log straight in
         qrrow = QHBoxLayout()
         self.lbl_remote_qr = QLabel("—")
         self.lbl_remote_qr.setFixedSize(132, 132)
@@ -464,7 +558,6 @@ class MainWindow(QMainWindow):
         self.dev_box = QVBoxLayout()
         rform.addRow(self.dev_box)
 
-        # HTTPS: browsers only allow the phone mic on a secure origin.
         self.lbl_https = QLabel("")
         self.lbl_https.setWordWrap(True)
         rform.addRow("Phone mic (https):", self.lbl_https)
@@ -493,20 +586,26 @@ class MainWindow(QMainWindow):
         )
         rnote.setWordWrap(True)
         rform.addRow(rnote)
-        container_layout.addWidget(rb)
+        lay.addWidget(rb)
+        lay.addStretch(1)
+        return page
 
-        self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Ready")
+    def _build_log_page(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(16)
 
-        self.setCentralWidget(outer)
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        try:
-            w = max(520, min(e.size().width() - 24, 980))
-            self.findChild(QScrollArea).setMaximumWidth(w + 24)
-        except Exception:
-            pass
+        lb = QGroupBox("Activity log")
+        llay = QVBoxLayout(lb)
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setFont(QFont("Consolas", 9))
+        self.log_box.setMinimumHeight(300)
+        llay.addWidget(self.log_box)
+        lay.addWidget(lb)
+        lay.addStretch(1)
+        return page
     def resizeEvent(self, e):
         # Only update the scroll area width when the window is actually resized,
         # not during scrolling. Avoids spurious layout changes.

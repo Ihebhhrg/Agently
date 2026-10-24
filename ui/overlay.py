@@ -430,7 +430,7 @@ class VoiceOverlay(QWidget):
         pct = int(min(100, (rms / max(gate * 6.0, 0.02)) * 100))
         self.level.setValue(pct)
         self.dot.setStyleSheet("color:#FF6B00; font-size:14px;" if (speaking or pct > 5)
-                               else "color:#9A9A9A; font-size:14px;")
+                               else "color:#a1a1aa; font-size:14px;")
 
     # ---------- speech -> agent ----------
     def _on_utterance(self, audio, sr):

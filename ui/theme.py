@@ -205,14 +205,72 @@ QScrollBar::add-page, QScrollBar::sub-page {{
     background: transparent;
 }}
 
-/* ---------- tooltips ---------- */
-QToolTip {{
+/* ---------- sidebar ---------- */
+QWidget#Sidebar {{
     background: {PANEL};
+    border-right: 1px solid {BORDER};
+}}
+QLabel#SidebarTitle {{
+    font-size: 20px;
+    font-weight: 700;
     color: {TEXT};
-    border: 1px solid {BORDER};
+    padding: 4px 0 0 0;
+    letter-spacing: -0.5px;
+}}
+QLabel#SidebarSub {{
+    color: {MUTED};
+    font-size: 11px;
+    font-weight: 400;
+    padding: 0 0 4px 0;
+}}
+QLabel#SidebarFooter {{
+    color: {MUTED_DARK};
+    font-size: 10px;
+    font-weight: 400;
+    padding: 8px 0 0 0;
+}}
+QPushButton#NavBtn {{
+    background: transparent;
+    border: none;
     border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: 8px 12px;
+    color: {MUTED};
+    font-weight: 500;
+    font-size: 13px;
+    text-align: left;
+    min-height: 0;
+    padding-left: 12px;
+}}
+QPushButton#NavBtn:hover {{
+    background: {CARD};
+    color: {TEXT};
+}}
+QPushButton#NavBtn:checked {{
+    background: {CARD};
+    color: {TEXT};
+    font-weight: 600;
+    border-left: 2px solid {ORANGE};
+}}
+
+/* ---------- top bar ---------- */
+QWidget#TopBar {{
+    background: {PANEL};
+    border-bottom: 1px solid {BORDER};
+}}
+QLabel#SectionTitle {{
+    font-size: 18px;
+    font-weight: 700;
+    color: {TEXT};
+    letter-spacing: -0.3px;
+}}
+QLabel#StatusPill {{
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: 9999px;
+    padding: 4px 12px;
+    color: {MUTED};
+    font-size: 11px;
+    font-weight: 500;
 }}
 
 /* ---------- labels ---------- */
