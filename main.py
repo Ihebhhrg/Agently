@@ -334,6 +334,45 @@ class MainWindow(QMainWindow):
         sform.addRow("Microphone:", self.lbl_mic)
         sform.addRow("Speech-to-text:", self.lbl_whisper)
         lay.addWidget(sb)
+
+        # Settings card
+        setb = QGroupBox("Settings")
+        srow = QHBoxLayout(setb)
+        srow.setSpacing(8)
+        srow.addWidget(QLabel("Hotkey:"))
+        self.cmb_hotkey = QComboBox()
+        self.cmb_hotkey.addItems([
+            "Alt+Shift+V", "Ctrl+Shift+V", "Alt+Space",
+            "Ctrl+Alt+V", "F9", "F10"
+        ])
+        self.cmb_hotkey.setCurrentText(self.cfg["Main"].get("hotkey", "Alt+Shift+V"))
+        self.cmb_hotkey.currentTextChanged.connect(self._change_hotkey)
+        srow.addWidget(self.cmb_hotkey)
+
+        self.chk_active = QCheckBox("Use active window")
+        self.chk_active.setChecked(self.cfg["Main"].getboolean("use_active_window", True))
+        self.chk_active.stateChanged.connect(self._save_active)
+        srow.addWidget(self.chk_active)
+
+        self.chk_tts = QCheckBox("Voice replies (TTS)")
+        self.chk_tts.setChecked(self.cfg["Main"].getboolean("tts", True))
+        self.chk_tts.stateChanged.connect(self._save_tts)
+        srow.addWidget(self.chk_tts)
+        srow.addStretch(1)
+        lay.addWidget(setb)
+
+        # App management card
+        mgmt = QGroupBox("App management")
+        mrow = QHBoxLayout(mgmt)
+        b_reset = QPushButton("Reset to defaults")
+        b_reset.clicked.connect(self._reset_to_defaults)
+        b_update = QPushButton("Check for updates")
+        b_update.clicked.connect(self._check_for_updates)
+        mrow.addWidget(b_reset)
+        mrow.addWidget(b_update)
+        mrow.addStretch(1)
+        lay.addWidget(mgmt)
+
         lay.addStretch(1)
         return page
 
@@ -1104,6 +1143,64 @@ class MainWindow(QMainWindow):
 
     def _save_config(self):
         secretstore.save_config(self.cfg, paths.CONFIG_PATH)
+
+    def _reset_to_defaults(self):
+        """Restore every setting to its shipped default."""
+        import shutil
+        try:
+            default_path = paths.resource_path("config.default.ini")
+            if os.path.exists(default_path):
+                shutil.copy2(default_path, paths.CONFIG_PATH)
+                self.log("Settings reset to defaults. Restarting...")
+                QMessageBox.information(
+                    self, "Reset complete",
+                    "All settings have been restored to defaults. "
+                    "The app will restart now.")
+                self._restart_app()
+            else:
+                self.log("Default config not found.")
+        except Exception as e:
+            self.log(f"Reset failed: {e}")
+
+    def _restart_app(self):
+        """Restart the app (used after reset or update)."""
+        import subprocess as sp
+        try:
+            exe = sys.executable
+            if getattr(sys, "frozen", False):
+                exe = sys.executable
+            sp.Popen([exe] + sys.argv, creationflags=sp.CREATE_NEW_CONSOLE)
+            self.close()
+        except Exception as e:
+            self.log(f"Restart failed: {e}")
+
+    def _check_for_updates(self):
+        """Check GitHub for a newer release."""
+        import urllib.request, json
+        try:
+            self.log("Checking for updates...")
+            url = "https://api.github.com/repos/Ihebhhrg/Agently/releases/latest"
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+            latest = data.get("tag_name", "").lstrip("v")
+            current = "1.1.0"
+            if latest and latest != current:
+                self.log(f"Update available: v{latest} (you have v{current})")
+                reply = QMessageBox.question(
+                    self, "Update available",
+                    f"A new version is available: v{latest}\n\n"
+                    f"Open the download page?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.Yes:
+                    self._open_url(data.get("html_url", "https://github.com/Ihebhhrg/Agently/releases"))
+            else:
+                self.log(f"You're up to date (v{current}).")
+                QMessageBox.information(self, "Up to date",
+                    f"You're running the latest version (v{current}).")
+        except Exception as e:
+            self.log(f"Update check failed: {e}")
+            QMessageBox.warning(self, "Update check failed",
+                f"Could not check for updates:\n{e}")
 
     def _fill_chat_models(self, provider):
         from core.providers import chat_model_list
